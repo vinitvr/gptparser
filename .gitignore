@@ -1,0 +1,45 @@
+# Swift/Xcode
+DerivedData/
+*.xcuserstate
+*.xcuserdata/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+
+# Build
+build/
+
+# User settings
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Asset catalogs
+*.xcassets/
+
+# Test output
+*.gcno
+*.gcda
+
+# Other
+*.tmp
+*.bak
+
+# Ignore downloaded files
+*.json
+
+# Ignore system files
+Thumbs.db
+
+# Ignore backup files
+*~
+
+# Ignore Python cache
+__pycache__/
+
+# Ignore VS Code settings
+.vscode/
