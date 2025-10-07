@@ -129,30 +129,110 @@ struct AnyCodable: Codable, CustomStringConvertible {
     }
 }
 
-struct ContentView: View {
+import SQLite
+
+struct ContentView: SwiftUI.View {
+    // MARK: - Tagging helpers
+    func addTag(_ tag: String, to convo: ConversationRecord) {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return }
+        if convo.tags.contains(trimmed) {
+            tagError = "Tag already exists."
+            newTagText = ""
+            return
+        }
+        SQLiteManager.shared.addTag(trimmed, to: convo.id)
+        self.reloadSelectedConversationTags()
+        newTagText = ""
+        tagFieldFocused = true
+    }
+
+    func removeTag(_ tag: String, from convo: ConversationRecord) {
+        SQLiteManager.shared.removeTag(tag, from: convo.id)
+        self.reloadSelectedConversationTags()
+    }
+
+    func reloadSelectedConversationTags() {
+        guard let convo = selectedConversation else { return }
+        let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
+        if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
+            conversations[idx].tags = updatedTags
+            selectedConversation = conversations[idx]
+        }
+    }
     @State private var showFileImporter = false
     @State private var showInvalidAlert = false
     @State private var showEmptyAlert = false
     @State private var errorDetails: String = ""
-    @State private var conversations: [Conversation] = []
-    @State private var selectedConversation: Conversation?
+    @State private var conversations: [ConversationRecord] = []
+    @State private var selectedConversation: ConversationRecord?
     @State private var isLoading: Bool = false
     @State private var fileLoaded: Bool = false
-    
+    @State private var newTagText: String = ""
+    @State private var tagError: String = ""
+    @FocusState private var tagFieldFocused: Bool
+
     private let bookmarkKey = "lastConversationFileBookmark"
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
+
+    var body: some SwiftUI.View {
+        return VStack(spacing: 0) {
+            // Top bar: Open button and tag UI
+            HStack(alignment: .center, spacing: 12) {
                 Button("Open") {
                     conversations = []
                     selectedConversation = nil
                     showFileImporter = true
                 }
-                .padding()
+                .padding(.vertical)
+                // Tag chips for selected conversation
+                if let convo = selectedConversation {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(convo.tags, id: \.self) { tag in
+                                HStack(spacing: 4) {
+                                    Text(tag)
+                                        .font(.caption)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.gray.opacity(0.2))
+                                        .cornerRadius(10)
+                                    Button(action: {
+                                        self.removeTag(tag, from: convo)
+                                    }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption2)
+                                            .foregroundColor(.red)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            // Add tag field
+                            HStack(spacing: 4) {
+                                TextField("Add tag", text: $newTagText)
+                                    .font(.caption)
+                                    .frame(minWidth: 60, maxWidth: 100)
+                                    .textFieldStyle(.roundedBorder)
+                                    .focused($tagFieldFocused)
+                                    .onSubmit {
+                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                    }
+                                Button(action: {
+                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(.accentColor)
+                                }
+                                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .frame(height: 32)
+                }
                 Spacer()
             }
             Divider()
+            // Main content: two-pane layout
             HStack(spacing: 0) {
                 // Left sidebar
                 List(selection: $selectedConversation) {
@@ -185,16 +265,17 @@ struct ContentView: View {
                             .padding(.bottom, 4)
                         Text("ID: \(convo.id)")
                             .font(.caption)
-                        if let created = convo.create_time {
+                        if let created = convo.createTime {
                             Text("Created: \(created)")
                                 .font(.caption)
                         }
-                        if let updated = convo.update_time {
+                        if let updated = convo.updateTime {
                             Text("Updated: \(updated)")
                                 .font(.caption)
                         }
                         Divider()
-                        if let mapping = convo.mapping {
+                        if let mappingStr = convo.mapping, let mappingData = mappingStr.data(using: .utf8) {
+                            let mapping = try? JSONDecoder().decode([String: AnyCodable].self, from: mappingData)
                             let messages = extractMessages(mapping: mapping)
                             if messages.isEmpty {
                                 Text("No conversation content available.")
@@ -229,7 +310,6 @@ struct ContentView: View {
                             Text("No conversation content available.")
                                 .foregroundColor(.secondary)
                         }
-                        
                     } else {
                         Text("Select a conversation from the left pane.")
                             .foregroundColor(.secondary)
@@ -239,9 +319,10 @@ struct ContentView: View {
                 Spacer()
             }
         }
+        .onAppear(perform: loadConversationsFromDB)
         .fileImporter(
             isPresented: $showFileImporter,
-            allowedContentTypes: [.json],
+            allowedContentTypes: [UTType.json],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -249,7 +330,7 @@ struct ContentView: View {
                 if let url = urls.first {
                     isLoading = true
                     Task {
-                        var didAccess = url.startAccessingSecurityScopedResource()
+                        let didAccess = url.startAccessingSecurityScopedResource()
                         defer {
                             if didAccess { url.stopAccessingSecurityScopedResource() }
                         }
@@ -262,7 +343,7 @@ struct ContentView: View {
                                 }
                                 return
                             }
-                            let decoder = JSONDecoder()
+                            // let decoder = JSONDecoder() // removed unused variable
                             let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
                             guard let rawArray = jsonObject as? [Any] else {
                                 await MainActor.run {
@@ -272,16 +353,24 @@ struct ContentView: View {
                                 }
                                 return
                             }
-                            let validConvos: [Conversation] = rawArray.compactMap { element in
+                            for element in rawArray {
                                 guard let dict = element as? [String: Any],
                                       let id = dict["id"] as? String,
-                                      let title = dict["title"] as? String else { return nil }
-                                let jsonData = try? JSONSerialization.data(withJSONObject: dict)
-                                return (jsonData != nil) ? (try? decoder.decode(Conversation.self, from: jsonData!)) : nil
+                                      let title = dict["title"] as? String else { continue }
+                                let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
+                                let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
+                                let convo = ConversationRecord(
+                                    id: id,
+                                    title: title,
+                                    createTime: dict["create_time"] as? String,
+                                    updateTime: dict["update_time"] as? String,
+                                    mapping: mappingStr,
+                                    tags: []
+                                )
+                                SQLiteManager.shared.upsertConversation(convo)
                             }
                             await MainActor.run {
-                                conversations = validConvos
-                                selectedConversation = validConvos.first
+                                loadConversationsFromDB()
                                 isLoading = false
                             }
                         } catch {
@@ -311,71 +400,46 @@ struct ContentView: View {
                 Text("The selected file could not be parsed as a ChatGPT conversation JSON file.\nError: \(errorDetails)")
             }
         }
-        .onAppear(perform: loadLastFile)
+    // MARK: - Tagging helpers
+    func addTag(_ tag: String, to convo: ConversationRecord) {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return }
+        if convo.tags.contains(trimmed) {
+            tagError = "Tag already exists."
+            newTagText = ""
+            return
+        }
+        SQLiteManager.shared.addTag(trimmed, to: convo.id)
+        self.reloadSelectedConversationTags()
+        newTagText = ""
+        tagFieldFocused = true
     }
-    
-    private func loadLastFile() {
-        if !fileLoaded {
-            if let bookmarkData = UserDefaults.standard.data(forKey: bookmarkKey) {
-                isLoading = true
-                Task {
-                    var stale = false
-                    if let url = try? URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], bookmarkDataIsStale: &stale) {
-                        let didAccess = url.startAccessingSecurityScopedResource()
-                        defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                        do {
-                            let data = try Data(contentsOf: url)
-                            if data.isEmpty {
-                                await MainActor.run {
-                                    isLoading = false
-                                    showEmptyAlert = true
-                                }
-                                return
-                            }
-                            let decoder = JSONDecoder()
-                            let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-                            guard let rawArray = jsonObject as? [Any] else {
-                                await MainActor.run {
-                                    errorDetails = "Root is not a JSON array."
-                                    isLoading = false
-                                    showInvalidAlert = true
-                                }
-                                return
-                            }
-                            let validConvos: [Conversation] = rawArray.compactMap { element in
-                                guard let dict = element as? [String: Any],
-                                      let id = dict["id"] as? String,
-                                      let title = dict["title"] as? String else { return nil }
-                                let jsonData = try? JSONSerialization.data(withJSONObject: dict)
-                                return (jsonData != nil) ? (try? decoder.decode(Conversation.self, from: jsonData!)) : nil
-                            }
-                            await MainActor.run {
-                                conversations = validConvos
-                                selectedConversation = validConvos.first
-                                isLoading = false
-                                fileLoaded = true
-                            }
-                        } catch {
-                            await MainActor.run {
-                                errorDetails = error.localizedDescription
-                                isLoading = false
-                                showInvalidAlert = true
-                            }
-                        }
-                    } else {
-                        await MainActor.run {
-                            isLoading = false
-                        }
-                    }
-                }
-            }
+
+    func removeTag(_ tag: String, from convo: ConversationRecord) {
+        SQLiteManager.shared.removeTag(tag, from: convo.id)
+        self.reloadSelectedConversationTags()
+    }
+
+    func reloadSelectedConversationTags() {
+        guard let convo = selectedConversation else { return }
+        let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
+        if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
+            conversations[idx].tags = updatedTags
+            selectedConversation = conversations[idx]
+        }
+    }
+    }
+
+    private func loadConversationsFromDB() {
+        conversations = SQLiteManager.shared.fetchAllConversations()
+        if let first = conversations.first {
+            selectedConversation = first
         }
     }
 }
-
 // SwiftUI Preview
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
+struct ContentView_Previews: SwiftUI.PreviewProvider {
+    static var previews: some SwiftUI.View {
         ContentView()
     }
 }
