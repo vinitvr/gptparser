@@ -1,3 +1,5 @@
+import SQLite
+
 // Helper for chat message
 struct ChatMessage: Identifiable, Hashable {
     let id: String
@@ -63,7 +65,6 @@ extension Conversation: Hashable, Equatable {
         hasher.combine(id)
     }
 }
-
 // Helper to decode unknown JSON structure
 struct AnyCodable: Codable, CustomStringConvertible {
     var value: Any
@@ -127,37 +128,17 @@ struct AnyCodable: Codable, CustomStringConvertible {
         }
         return str
     }
+// End of AnyCodable
 }
 
-import SQLite
-
 struct ContentView: SwiftUI.View {
-    // MARK: - Tagging helpers
-    func addTag(_ tag: String, to convo: ConversationRecord) {
-        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return }
-        if convo.tags.contains(trimmed) {
-            tagError = "Tag already exists."
-            newTagText = ""
-            return
-        }
-        SQLiteManager.shared.addTag(trimmed, to: convo.id)
-        self.reloadSelectedConversationTags()
-        newTagText = ""
-        tagFieldFocused = true
-    }
-
-    func removeTag(_ tag: String, from convo: ConversationRecord) {
-        SQLiteManager.shared.removeTag(tag, from: convo.id)
-        self.reloadSelectedConversationTags()
-    }
-
-    func reloadSelectedConversationTags() {
-        guard let convo = selectedConversation else { return }
-        let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
-        if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
-            conversations[idx].tags = updatedTags
-            selectedConversation = conversations[idx]
+    // Returns conversations filtered by search results if search is active, otherwise all conversations
+    func filteredConversations() -> [ConversationRecord] {
+        if !searchText.isEmpty && !searchResults.isEmpty {
+            // Only show conversations that have a search result
+            return conversations.filter { searchResults[$0.id] != nil }
+        } else {
+            return conversations
         }
     }
     @State private var showFileImporter = false
@@ -169,237 +150,12 @@ struct ContentView: SwiftUI.View {
     @State private var isLoading: Bool = false
     @State private var fileLoaded: Bool = false
     @State private var newTagText: String = ""
-    @State private var tagError: String = ""
+    
     @FocusState private var tagFieldFocused: Bool
-
-    private let bookmarkKey = "lastConversationFileBookmark"
-
-    var body: some SwiftUI.View {
-        return VStack(spacing: 0) {
-            // Top bar: Open button and tag UI
-            HStack(alignment: .center, spacing: 12) {
-                Button("Open") {
-                    conversations = []
-                    selectedConversation = nil
-                    showFileImporter = true
-                }
-                .padding(.vertical)
-                // Tag chips for selected conversation
-                if let convo = selectedConversation {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(convo.tags, id: \.self) { tag in
-                                HStack(spacing: 4) {
-                                    Text(tag)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.gray.opacity(0.2))
-                                        .cornerRadius(10)
-                                    Button(action: {
-                                        self.removeTag(tag, from: convo)
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.caption2)
-                                            .foregroundColor(.red)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            // Add tag field
-                            HStack(spacing: 4) {
-                                TextField("Add tag", text: $newTagText)
-                                    .font(.caption)
-                                    .frame(minWidth: 60, maxWidth: 100)
-                                    .textFieldStyle(.roundedBorder)
-                                    .focused($tagFieldFocused)
-                                    .onSubmit {
-                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                    }
-                                Button(action: {
-                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(.accentColor)
-                                }
-                                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .frame(height: 32)
-                }
-                Spacer()
-            }
-            Divider()
-            // Main content: two-pane layout
-            HStack(spacing: 0) {
-                // Left sidebar
-                List(selection: $selectedConversation) {
-                    ForEach(conversations) { convo in
-                        Text(convo.title)
-                            .padding(.vertical, 4)
-                            .background(selectedConversation == convo ? Color.accentColor.opacity(0.2) : Color.clear)
-                            .cornerRadius(6)
-                            .onTapGesture {
-                                selectedConversation = convo
-                            }
-                    }
-                }
-                .frame(width: 250)
-                Divider()
-                // Central pane
-                VStack(alignment: .leading) {
-                    if isLoading {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            ProgressView("Loading conversations...Please wait")
-                                .progressViewStyle(CircularProgressViewStyle())
-                            Spacer()
-                        }
-                        Spacer()
-                    } else if let convo = selectedConversation {
-                        Text(convo.title)
-                            .font(.title2)
-                            .padding(.bottom, 4)
-                        Text("ID: \(convo.id)")
-                            .font(.caption)
-                        if let created = convo.createTime {
-                            Text("Created: \(created)")
-                                .font(.caption)
-                        }
-                        if let updated = convo.updateTime {
-                            Text("Updated: \(updated)")
-                                .font(.caption)
-                        }
-                        Divider()
-                        if let mappingStr = convo.mapping, let mappingData = mappingStr.data(using: .utf8) {
-                            let mapping = try? JSONDecoder().decode([String: AnyCodable].self, from: mappingData)
-                            let messages = extractMessages(mapping: mapping)
-                            if messages.isEmpty {
-                                Text("No conversation content available.")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                ScrollView {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        ForEach(messages) { msg in
-                                            HStack {
-                                                if msg.author == "user" {
-                                                    Text(msg.content)
-                                                        .padding(10)
-                                                        .background(Color.blue.opacity(0.2))
-                                                        .cornerRadius(12)
-                                                        .frame(maxWidth: 350, alignment: .leading)
-                                                    Spacer()
-                                                } else {
-                                                    Spacer()
-                                                    Text(msg.content)
-                                                        .padding(10)
-                                                        .background(Color.green.opacity(0.2))
-                                                        .cornerRadius(12)
-                                                        .frame(maxWidth: 1000, alignment: .trailing)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding(.top, 8)
-                                }
-                            }
-                        } else {
-                            Text("No conversation content available.")
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("Select a conversation from the left pane.")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding()
-                Spacer()
-            }
-        }
-        .onAppear(perform: loadConversationsFromDB)
-        .fileImporter(
-            isPresented: $showFileImporter,
-            allowedContentTypes: [UTType.json],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                if let url = urls.first {
-                    isLoading = true
-                    Task {
-                        let didAccess = url.startAccessingSecurityScopedResource()
-                        defer {
-                            if didAccess { url.stopAccessingSecurityScopedResource() }
-                        }
-                        do {
-                            let data = try Data(contentsOf: url)
-                            if data.isEmpty {
-                                await MainActor.run {
-                                    isLoading = false
-                                    showEmptyAlert = true
-                                }
-                                return
-                            }
-                            // let decoder = JSONDecoder() // removed unused variable
-                            let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-                            guard let rawArray = jsonObject as? [Any] else {
-                                await MainActor.run {
-                                    errorDetails = "Root is not a JSON array."
-                                    isLoading = false
-                                    showInvalidAlert = true
-                                }
-                                return
-                            }
-                            for element in rawArray {
-                                guard let dict = element as? [String: Any],
-                                      let id = dict["id"] as? String,
-                                      let title = dict["title"] as? String else { continue }
-                                let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
-                                let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
-                                let convo = ConversationRecord(
-                                    id: id,
-                                    title: title,
-                                    createTime: dict["create_time"] as? String,
-                                    updateTime: dict["update_time"] as? String,
-                                    mapping: mappingStr,
-                                    tags: []
-                                )
-                                SQLiteManager.shared.upsertConversation(convo)
-                            }
-                            await MainActor.run {
-                                loadConversationsFromDB()
-                                isLoading = false
-                            }
-                        } catch {
-                            await MainActor.run {
-                                errorDetails = error.localizedDescription
-                                isLoading = false
-                                showInvalidAlert = true
-                            }
-                        }
-                    }
-                }
-            case .failure(_):
-                showInvalidAlert = true
-            }
-        }
-        .alert("File is empty", isPresented: $showEmptyAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The selected file is empty.")
-        }
-        .alert("Unable to parse file", isPresented: $showInvalidAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            if errorDetails.isEmpty {
-                Text("The selected file could not be parsed as a ChatGPT conversation JSON file.")
-            } else {
-                Text("The selected file could not be parsed as a ChatGPT conversation JSON file.\nError: \(errorDetails)")
-            }
-        }
+    @State private var tagError: String?
+    @State private var searchText: String = ""
+    @State private var searchResults: [String: (content: String, score: Double)] = [:]
+    
     // MARK: - Tagging helpers
     func addTag(_ tag: String, to convo: ConversationRecord) {
         let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -414,12 +170,12 @@ struct ContentView: SwiftUI.View {
         newTagText = ""
         tagFieldFocused = true
     }
-
+    
     func removeTag(_ tag: String, from convo: ConversationRecord) {
         SQLiteManager.shared.removeTag(tag, from: convo.id)
         self.reloadSelectedConversationTags()
     }
-
+    
     func reloadSelectedConversationTags() {
         guard let convo = selectedConversation else { return }
         let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
@@ -428,18 +184,297 @@ struct ContentView: SwiftUI.View {
             selectedConversation = conversations[idx]
         }
     }
+    // MARK: - Search functionality
+    func performSearch() {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            searchResults = [:]
+            return
+        }
+        let ftsResults = SQLiteManager.shared.searchMessagesFTS(query: trimmed)
+        var resultsDict: [String: (content: String, score: Double)] = [:]
+        for result in ftsResults {
+            // Only show the first matching message per conversation
+            if resultsDict[result.conversationId] == nil {
+                resultsDict[result.conversationId] = (content: result.content, score: 1.0)
+            }
+        }
+        searchResults = resultsDict
     }
-
-    private func loadConversationsFromDB() {
-        conversations = SQLiteManager.shared.fetchAllConversations()
-        if let first = conversations.first {
-            selectedConversation = first
+    
+    var body: some SwiftUI.View {
+        VStack(spacing: 0) {
+            // Top bar: Open button, search bar, and tag UI
+            HStack(alignment: .center, spacing: 12) {
+                Button("Open") {
+                    conversations = []
+                    selectedConversation = nil
+                    showFileImporter = true
+                }
+                .padding(.vertical)
+                // Search bar
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                    TextField("Search conversations...", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 180, maxWidth: 260)
+                        .onChange(of: searchText) { self.performSearch() }
+                    if !searchText.isEmpty {
+                        Button(action: {
+                            searchText = ""
+                            searchResults = [:]
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                    // Tag chips for selected conversation
+                    if let convo = selectedConversation {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(convo.tags, id: \.self) { tag in
+                                    HStack(spacing: 4) {
+                                        Text(tag)
+                                            .font(.caption)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.gray.opacity(0.2))
+                                            .cornerRadius(10)
+                                        Button(action: {
+                                            self.removeTag(tag, from: convo)
+                                        }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.caption2)
+                                                .foregroundColor(.red)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                // Add tag field
+                                HStack(spacing: 4) {
+                                    TextField("Add tag", text: $newTagText)
+                                        .font(.caption)
+                                        .frame(minWidth: 60, maxWidth: 100)
+                                        .textFieldStyle(.roundedBorder)
+                                        .focused($tagFieldFocused)
+                                        .onSubmit {
+                                            self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                        }
+                                    Button(action: {
+                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                    }) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .foregroundColor(.accentColor)
+                                    }
+                                    .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .frame(height: 32)
+                    }
+                    Spacer()
+                }
+                Divider()
+                // Main content: two-pane layout
+                HStack(spacing: 0) {
+                    // Left sidebar
+                    List(selection: $selectedConversation) {
+                        let filtered = self.filteredConversations()
+                            ForEach(filtered, id: \.id) { convo in
+                            let isSelected = selectedConversation == convo
+                            let isSearchResult = searchResults[convo.id] != nil
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(convo.title)
+                                    .fontWeight(isSearchResult ? .bold : .regular)
+                                if let result = searchResults[convo.id], !searchText.isEmpty {
+                                    Text(result.content)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+                            .cornerRadius(6)
+                            .onTapGesture {
+                                selectedConversation = convo
+                            }
+                        }
+                    }
+                    .frame(width: 250)
+                    Divider()
+                    // Central pane
+                    VStack(alignment: .leading) {
+                        if isLoading {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                ProgressView("Loading conversations...Please wait")
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                Spacer()
+                            }
+                            Spacer()
+                        } else if let convo = selectedConversation {
+                            Text(convo.title)
+                                .font(.title2)
+                                .padding(.bottom, 4)
+                            Text("ID: \(convo.id)")
+                                .font(.caption)
+                            if let created = convo.createTime {
+                                Text("Created: \(created)")
+                                    .font(.caption)
+                            }
+                            if let updated = convo.updateTime {
+                                Text("Updated: \(updated)")
+                                    .font(.caption)
+                            }
+                            Divider()
+                            if let mappingStr = convo.mapping, let mappingData = mappingStr.data(using: .utf8) {
+                                let mapping = try? JSONDecoder().decode([String: AnyCodable].self, from: mappingData)
+                                let messages = extractMessages(mapping: mapping)
+                                if messages.isEmpty {
+                                    Text("No conversation content available.")
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    ScrollView {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            ForEach(messages) { msg in
+                                                HStack {
+                                                    if msg.author == "user" {
+                                                        Text(msg.content)
+                                                            .padding(10)
+                                                            .background(Color.blue.opacity(0.2))
+                                                            .cornerRadius(12)
+                                                            .frame(maxWidth: 350, alignment: .leading)
+                                                        Spacer()
+                                                    } else {
+                                                        Spacer()
+                                                        Text(msg.content)
+                                                            .padding(10)
+                                                            .background(Color.green.opacity(0.2))
+                                                            .cornerRadius(12)
+                                                            .frame(maxWidth: 1000, alignment: .trailing)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding(.top, 8)
+                                    }
+                                }
+                            } else {
+                                Text("No conversation content available.")
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            Text("Select a conversation from the left pane.")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    Spacer()
+                }
+            }
+            .onAppear(perform: loadConversationsFromDB)
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [UTType.json],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        isLoading = true
+                        Task {
+                            let didAccess = url.startAccessingSecurityScopedResource()
+                            defer {
+                                if didAccess { url.stopAccessingSecurityScopedResource() }
+                            }
+                            do {
+                                let data = try Data(contentsOf: url)
+                                if data.isEmpty {
+                                    await MainActor.run {
+                                        isLoading = false
+                                        showEmptyAlert = true
+                                    }
+                                    return
+                                }
+                                let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
+                                guard let rawArray = jsonObject as? [Any] else {
+                                    await MainActor.run {
+                                        errorDetails = "Root is not a JSON array."
+                                        isLoading = false
+                                        showInvalidAlert = true
+                                    }
+                                    return
+                                }
+                                for element in rawArray {
+                                    guard let dict = element as? [String: Any],
+                                          let id = dict["id"] as? String,
+                                          let title = dict["title"] as? String else { continue }
+                                    let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
+                                    let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
+                                    let convo = ConversationRecord(
+                                        id: id,
+                                        title: title,
+                                        createTime: dict["create_time"] as? String,
+                                        updateTime: dict["update_time"] as? String,
+                                        mapping: mappingStr,
+                                        tags: []
+                                    )
+                                    SQLiteManager.shared.upsertConversation(convo)
+                                    // Insert messages into FTS table
+                                    if let mapping = dict["mapping"] as? [String: Any] {
+                                        for (msgId, nodeAny) in mapping {
+                                            guard let node = nodeAny as? [String: Any],
+                                                  let message = node["message"] as? [String: Any],
+                                                  let authorDict = message["author"] as? [String: Any],
+                                                  let role = authorDict["role"] as? String,
+                                                  let contentDict = message["content"] as? [String: Any],
+                                                  let parts = contentDict["parts"] as? [Any],
+                                                  let text = parts.first as? String else { continue }
+                                            SQLiteManager.shared.insertMessageFTS(messageId: msgId, conversationId: id, author: role, content: text)
+                                        }
+                                    }
+                                }
+                                await MainActor.run {
+                                    loadConversationsFromDB()
+                                    isLoading = false
+                                }
+                            } catch {
+                                await MainActor.run {
+                                    errorDetails = error.localizedDescription
+                                    isLoading = false
+                                    showInvalidAlert = true
+                                }
+                            }
+                        }
+                    }
+                case .failure(_):
+                    showInvalidAlert = true
+                }
+            }
+            .alert("File is empty", isPresented: $showEmptyAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The selected file is empty.")
+            }
+            .alert("Unable to parse file", isPresented: $showInvalidAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                if errorDetails.isEmpty {
+                    Text("The selected file could not be parsed as a ChatGPT conversation JSON file.")
+                } else {
+                    Text("The selected file could not be parsed as a ChatGPT conversation JSON file.\nError: \(errorDetails)")
+                }
+            }
+        }
+        
+        private func loadConversationsFromDB() {
+            conversations = SQLiteManager.shared.fetchAllConversations()
+            if let first = conversations.first {
+                selectedConversation = first
+            }
         }
     }
-}
-// SwiftUI Preview
-struct ContentView_Previews: SwiftUI.PreviewProvider {
-    static var previews: some SwiftUI.View {
-        ContentView()
-    }
-}
