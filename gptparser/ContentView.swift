@@ -134,6 +134,40 @@ struct AnyCodable: Codable, CustomStringConvertible {
 }
 
 struct ContentView: SwiftUI.View {
+    // State for expanded/collapsed folders
+    @State private var expandedFolders: Set<String> = []
+
+    // State for selected conversation (by id)
+    @State private var selectedConversationId: String? = nil
+
+    // Computed property for selected conversation
+    private var selectedConversation: ConversationRecord? {
+        conversations.first(where: { $0.id == selectedConversationId })
+    }
+
+    // State for recent folders (LRU, max 3)
+    @State private var recentFolders: [String] = []
+    private func updateRecentFolders(with folderId: String) {
+        // Remove if already present, then insert at front
+        recentFolders.removeAll { $0 == folderId }
+        recentFolders.insert(folderId, at: 0)
+        // Keep only max 3
+        if recentFolders.count > 3 {
+            recentFolders = Array(recentFolders.prefix(3))
+        }
+        // TODO: Persist to SQLite if needed
+    }
+
+    // State for recent tags (LRU, max 3)
+    @State private var recentTags: [String] = []
+    private func updateRecentTags(with tag: String) {
+        recentTags.removeAll { $0 == tag }
+        recentTags.insert(tag, at: 0)
+        if recentTags.count > 3 {
+            recentTags = Array(recentTags.prefix(3))
+        }
+        // TODO: Persist to SQLite if needed
+    }
     // Step 1: Data layer helpers for folder/conversation grouping
     struct FolderInfo {
         let id: String
@@ -143,8 +177,15 @@ struct ContentView: SwiftUI.View {
 
     // Fetch all folders from DB
     func fetchAllFolders() -> [FolderInfo] {
-        SQLiteManager.shared.fetchFolders().map { (id, name) in
-            FolderInfo(id: id, name: name, conversationIds: [])
+        SQLiteManager.shared.fetchFolders().map { (id, name, conversationIdsJson) in
+            let ids: [String]
+            if let data = conversationIdsJson.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [String] {
+                ids = arr
+            } else {
+                ids = []
+            }
+            return FolderInfo(id: id, name: name, conversationIds: ids)
         }
     }
 
@@ -160,7 +201,7 @@ struct ContentView: SwiftUI.View {
             }
         }
         let grouped = folders.map { folder in
-            (folder: folder, conversations: folder.conversationIds.compactMap { id in folderMap[folder.id]?.first(where: { $0.id == id }) })
+            (folder: folder, conversations: folderMap[folder.id] ?? [])
         }
         return (grouped, ungrouped)
     }
@@ -179,7 +220,7 @@ struct ContentView: SwiftUI.View {
     @State private var errorDetails: String = ""
     // ...existing code...
     @State private var conversations: [ConversationRecord] = []
-    @State private var selectedConversation: ConversationRecord?
+    // Remove old selectedConversation state
     @State private var isLoading: Bool = false
     @State private var fileLoaded: Bool = false
     @State private var newTagText: String = ""
@@ -214,7 +255,7 @@ struct ContentView: SwiftUI.View {
         let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
         if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
             conversations[idx].tags = updatedTags
-            selectedConversation = conversations[idx]
+            // No need to assign to selectedConversation; computed property will update automatically
         }
     }
     // MARK: - Search functionality
@@ -253,13 +294,13 @@ struct ContentView: SwiftUI.View {
                 VStack(alignment: .leading, spacing: 8) {
                     Button("Open") {
                         conversations = []
-                        selectedConversation = nil
+                        selectedConversationId = nil
                         showFileImporter = true
                     }
                     Button("Clear Data") {
                         SQLiteManager.shared.clearAllData()
                         conversations = []
-                        selectedConversation = nil
+                        selectedConversationId = nil
                     }
                     .foregroundColor(.red)
                 }
@@ -331,27 +372,91 @@ struct ContentView: SwiftUI.View {
                 Divider()
                 // Main content: two-pane layout
                 HStack(spacing: 0) {
-                    // Left sidebar
-                    List(selection: $selectedConversation) {
-                        let filtered = self.filteredConversations()
-                            ForEach(filtered, id: \.id) { convo in
-                            let isSelected = selectedConversation == convo
-                            let isSearchResult = searchResults[convo.id] != nil
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(convo.title)
-                                    .fontWeight(isSearchResult ? .bold : .regular)
-                                if let result = searchResults[convo.id], !searchText.isEmpty {
-                                    Text(result.content)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(2)
+                    // Sidebar: Only folders and their conversations
+                    List {
+                        let folders = fetchAllFolders()
+                        let (grouped, ungrouped) = groupConversationsByFolder(conversations: conversations, folders: folders)
+                        // Folders as expandable/collapsible
+                        ForEach(grouped, id: \.folder.id) { group in
+                            // Folder header (expand/collapse on tap)
+                            HStack {
+                                Image(systemName: expandedFolders.contains(group.folder.id) ? "chevron.down" : "chevron.right")
+                                    .foregroundColor(.accentColor)
+                                Text(group.folder.name)
+                                    .font(.headline)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if expandedFolders.contains(group.folder.id) {
+                                    expandedFolders.remove(group.folder.id)
+                                } else {
+                                    expandedFolders.insert(group.folder.id)
+                                    updateRecentFolders(with: group.folder.id)
                                 }
                             }
-                            .padding(.vertical, 4)
-                            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-                            .cornerRadius(6)
-                            .onTapGesture {
-                                selectedConversation = convo
+                            // Conversations under folder
+                            if expandedFolders.contains(group.folder.id) {
+                                ForEach(group.conversations, id: \.id) { convo in
+                                    let isSelected = selectedConversationId == convo.id
+                                    HStack {
+                                        Spacer().frame(width: 18)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(convo.title)
+                                                .fontWeight(isSelected ? .bold : .regular)
+                                            if !convo.tags.isEmpty {
+                                                HStack(spacing: 4) {
+                                                    ForEach(convo.tags, id: \.self) { tag in
+                                                        Text(tag)
+                                                            .font(.caption2)
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(Color.gray.opacity(0.15))
+                                                            .cornerRadius(8)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding(.vertical, 3)
+                                        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+                                        .cornerRadius(6)
+                                    }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedConversationId = convo.id
+                                    }
+                                }
+                            }
+                        }
+                        // Ungrouped conversations at the bottom
+                        if !ungrouped.isEmpty {
+                            Section(header: Text("Ungrouped").font(.headline)) {
+                                ForEach(ungrouped, id: \.id) { convo in
+                                    let isSelected = selectedConversationId == convo.id
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(convo.title)
+                                            .fontWeight(isSelected ? .bold : .regular)
+                                        if !convo.tags.isEmpty {
+                                            HStack(spacing: 4) {
+                                                ForEach(convo.tags, id: \.self) { tag in
+                                                    Text(tag)
+                                                        .font(.caption2)
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 2)
+                                                        .background(Color.gray.opacity(0.15))
+                                                        .cornerRadius(8)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .padding(.vertical, 3)
+                                    .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
+                                    .cornerRadius(6)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedConversationId = convo.id
+                                    }
+                                }
                             }
                         }
                     }
@@ -555,7 +660,7 @@ struct ContentView: SwiftUI.View {
         private func loadConversationsFromDB() {
             conversations = SQLiteManager.shared.fetchAllConversations()
             if let first = conversations.first {
-                selectedConversation = first
+                selectedConversationId = first.id
             }
         }
     }

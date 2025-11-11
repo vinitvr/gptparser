@@ -2,13 +2,15 @@
 
 extension SQLiteManager {
     // Fetch all folders for debugging/verification
-    func fetchFolders() -> [(id: String, name: String)] {
-        var results: [(id: String, name: String)] = []
+    func fetchFolders() -> [(id: String, name: String, conversationIdsJson: String)] {
+        var results: [(id: String, name: String, conversationIdsJson: String)] = []
         do {
+            let conversationIdsCol = Expression<String>("conversation_ids")
             for row in try db.prepare(folders) {
                 let folderId = row[folder_id]
                 let folderName = row[folder_name]
-                results.append((id: folderId, name: folderName))
+                let conversationIdsJson = row[conversationIdsCol]
+                results.append((id: folderId, name: folderName, conversationIdsJson: conversationIdsJson))
             }
         } catch {
             print("Fetch folders error: \(error)")
