@@ -134,6 +134,36 @@ struct AnyCodable: Codable, CustomStringConvertible {
 }
 
 struct ContentView: SwiftUI.View {
+    // Step 1: Data layer helpers for folder/conversation grouping
+    struct FolderInfo {
+        let id: String
+        let name: String
+        let conversationIds: [String]
+    }
+
+    // Fetch all folders from DB
+    func fetchAllFolders() -> [FolderInfo] {
+        SQLiteManager.shared.fetchFolders().map { (id, name) in
+            FolderInfo(id: id, name: name, conversationIds: [])
+        }
+    }
+
+    // Group conversations by folderId
+    func groupConversationsByFolder(conversations: [ConversationRecord], folders: [FolderInfo]) -> ([(folder: FolderInfo, conversations: [ConversationRecord])], [ConversationRecord]) {
+        var folderMap: [String: [ConversationRecord]] = [:]
+        var ungrouped: [ConversationRecord] = []
+        for convo in conversations {
+            if let fid = convo.folderId, !fid.isEmpty {
+                folderMap[fid, default: []].append(convo)
+            } else {
+                ungrouped.append(convo)
+            }
+        }
+        let grouped = folders.map { folder in
+            (folder: folder, conversations: folder.conversationIds.compactMap { id in folderMap[folder.id]?.first(where: { $0.id == id }) })
+        }
+        return (grouped, ungrouped)
+    }
     // Returns conversations filtered by search results if search is active, otherwise all conversations
     func filteredConversations() -> [ConversationRecord] {
         if !searchText.isEmpty && !searchResults.isEmpty {
