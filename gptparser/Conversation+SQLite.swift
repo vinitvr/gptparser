@@ -11,6 +11,7 @@ struct ConversationRecord: Identifiable, Equatable, Hashable {
     let updateTime: String?
     let mapping: String? // JSON string
     var tags: [String] = []
+    var folderId: String? = nil
 }
 
 // Extend SQLiteManager for CRUD
@@ -26,7 +27,8 @@ extension SQLiteManager {
                     createTime: row[createTime],
                     updateTime: row[updateTime],
                     mapping: row[mapping],
-                    tags: fetchTags(for: row[id])
+                    tags: fetchTags(for: row[id]),
+                    folderId: row[folderId]
                 )
                 results.append(convo)
             }
@@ -36,21 +38,7 @@ extension SQLiteManager {
         return results
     }
 
-    // Insert or update a conversation
-    func upsertConversation(_ convo: ConversationRecord) {
-        do {
-            let insert = conversations.insert(or: .replace,
-                id <- convo.id,
-                title <- convo.title,
-                createTime <- convo.createTime,
-                updateTime <- convo.updateTime,
-                mapping <- convo.mapping
-            )
-            try db.run(insert)
-        } catch {
-            print("Upsert conversation error: \(error)")
-        }
-    }
+    // ...existing code...
 
     // Fetch tags for a conversation
     func fetchTags(for convoId: String) -> [String] {

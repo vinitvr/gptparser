@@ -42,9 +42,10 @@ struct Conversation: Identifiable, Decodable {
     let create_time: String?
     let update_time: String?
     let mapping: [String: AnyCodable]?
+    let folder_id: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, create_time, update_time, mapping
+        case id, title, create_time, update_time, mapping, folder_id
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +55,7 @@ struct Conversation: Identifiable, Decodable {
         self.create_time = try? container.decode(String.self, forKey: .create_time)
         self.update_time = try? container.decode(String.self, forKey: .update_time)
         self.mapping = try? container.decodeIfPresent([String: AnyCodable].self, forKey: .mapping)
+        self.folder_id = try? container.decodeIfPresent(String.self, forKey: .folder_id)
     }
 }
 
@@ -145,6 +147,7 @@ struct ContentView: SwiftUI.View {
     @State private var showInvalidAlert = false
     @State private var showEmptyAlert = false
     @State private var errorDetails: String = ""
+    // ...existing code...
     @State private var conversations: [ConversationRecord] = []
     @State private var selectedConversation: ConversationRecord?
     @State private var isLoading: Bool = false
@@ -203,13 +206,32 @@ struct ContentView: SwiftUI.View {
     }
     
     var body: some SwiftUI.View {
+        let dbPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first!.appending("/conversations.sqlite3")
         VStack(spacing: 0) {
             // Top bar: Open button, search bar, and tag UI
             HStack(alignment: .center, spacing: 12) {
-                Button("Open") {
-                    conversations = []
-                    selectedConversation = nil
-                    showFileImporter = true
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("DB Path:")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(dbPath)
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Open") {
+                        conversations = []
+                        selectedConversation = nil
+                        showFileImporter = true
+                    }
+                    Button("Clear Data") {
+                        SQLiteManager.shared.clearAllData()
+                        conversations = []
+                        selectedConversation = nil
+                    }
+                    .foregroundColor(.red)
                 }
                 .padding(.vertical)
                 // Search bar
@@ -401,27 +423,56 @@ struct ContentView: SwiftUI.View {
                                     return
                                 }
                                 let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-                                guard let rawArray = jsonObject as? [Any] else {
+                                guard let rootDict = jsonObject as? [String: Any],
+                                      let conversationsArray = rootDict["conversations"] as? [[String: Any]] else {
                                     await MainActor.run {
-                                        errorDetails = "Root is not a JSON array."
+                                        errorDetails = "Root is not a valid ChatGPT export (missing 'conversations')."
                                         isLoading = false
                                         showInvalidAlert = true
                                     }
                                     return
                                 }
-                                for element in rawArray {
-                                    guard let dict = element as? [String: Any],
-                                          let id = dict["id"] as? String,
+                                let foldersArray = rootDict["folders"] as? [[String: Any]]
+                                // Insert folders
+                                if let foldersArray = foldersArray {
+                                    for folder in foldersArray {
+                                        guard let folderId = folder["id"] as? String,
+                                              let folderName = folder["name"] as? String else {
+                                            continue
+                                        }
+                                        // Extract conversation_ids as [String]
+                                        let conversationIds: [String]
+                                        if let ids = folder["conversation_ids"] as? [String] {
+                                            conversationIds = ids
+                                        } else if let ids = folder["conversation_ids"] as? [Any] {
+                                            conversationIds = ids.compactMap { $0 as? String }
+                                        } else {
+                                            conversationIds = []
+                                        }
+                                        SQLiteManager.shared.upsertFolder(id: folderId, name: folderName, conversationIds: conversationIds)
+                                    }
+                                }
+                                // Debug: Print all folders after import
+                                let allFolders = SQLiteManager.shared.fetchFolders()
+                                print("[DEBUG] Folders in DB after import:")
+                                for folder in allFolders {
+                                    print("  id: \(folder.id), name: \(folder.name)")
+                                }
+                                // Insert conversations
+                                for dict in conversationsArray {
+                                    guard let id = dict["id"] as? String,
                                           let title = dict["title"] as? String else { continue }
                                     let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
                                     let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
+                                    let folderId = dict["folder_id"] as? String
                                     let convo = ConversationRecord(
                                         id: id,
                                         title: title,
                                         createTime: dict["create_time"] as? String,
                                         updateTime: dict["update_time"] as? String,
                                         mapping: mappingStr,
-                                        tags: []
+                                        tags: [],
+                                        folderId: folderId
                                     )
                                     SQLiteManager.shared.upsertConversation(convo)
                                     // Insert messages into FTS table
