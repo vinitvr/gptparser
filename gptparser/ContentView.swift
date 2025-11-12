@@ -558,16 +558,22 @@ struct ContentView: SwiftUI.View {
                                     return
                                 }
                                 let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-                                guard let rootDict = jsonObject as? [String: Any],
-                                      let conversationsArray = rootDict["conversations"] as? [[String: Any]] else {
+                                // Support both {conversations: [...]} and plain array formats
+                                let conversationsArray: [[String: Any]]
+                                var foldersArray: [[String: Any]]? = nil
+                                if let rootDict = jsonObject as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]] {
+                                    conversationsArray = arr
+                                    foldersArray = rootDict["folders"] as? [[String: Any]]
+                                } else if let arr = jsonObject as? [[String: Any]] {
+                                    conversationsArray = arr
+                                } else {
                                     await MainActor.run {
-                                        errorDetails = "Root is not a valid ChatGPT export (missing 'conversations')."
+                                        errorDetails = "Root is not a valid ChatGPT export (missing 'conversations' or array root)."
                                         isLoading = false
                                         showInvalidAlert = true
                                     }
                                     return
                                 }
-                                let foldersArray = rootDict["folders"] as? [[String: Any]]
                                 // Insert folders
                                 if let foldersArray = foldersArray {
                                     for folder in foldersArray {
