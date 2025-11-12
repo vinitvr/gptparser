@@ -421,6 +421,8 @@ struct ContentView: SwiftUI.View {
                         SQLiteManager.shared.clearAllData()
                         conversations = []
                         selectedConversationId = nil
+                        searchText = ""
+                        searchResults = [:]
                     }
                     .foregroundColor(.red)
                 }
@@ -629,6 +631,7 @@ struct ContentView: SwiftUI.View {
                                                     let msg = pair.element
                                                     let isMatch = !lowerSearch.isEmpty && msg.content.lowercased().contains(lowerSearch)
                                                     let isFirstMatch = isMatch && matchIndices.first == idx
+                                                    // Only show messages that belong to this conversation
                                                     HStack {
                                                         if msg.author == "user" {
                                                             ZStack(alignment: .leading) {
