@@ -192,6 +192,7 @@ class SQLiteManager {
 
     // Upsert (insert or update) a conversation, including folderId
     func upsertConversation(_ convo: ConversationRecord) {
+        print("[DEBUG] upsertConversation: id=\(convo.id), title=\(convo.title), folderId=\(String(describing: convo.folderId)), tags=\(convo.tags)")
         do {
             let insert = conversations.insert(or: .replace,
                 id <- convo.id,
@@ -202,6 +203,7 @@ class SQLiteManager {
                 folderId <- convo.folderId
             )
             try db.run(insert)
+            print("[DEBUG] upsertConversation: success for id=\(convo.id)")
         } catch {
             print("SQLite upsertConversation error: \(error)")
         }

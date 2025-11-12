@@ -30,11 +30,13 @@ extension SQLiteManager {
                     tags: fetchTags(for: row[id]),
                     folderId: row[folderId]
                 )
+                print("[DEBUG] fetchAllConversations: id=\(convo.id), title=\(convo.title), folderId=\(String(describing: convo.folderId)), tags=\(convo.tags)")
                 results.append(convo)
             }
         } catch {
             print("Fetch conversations error: \(error)")
         }
+        print("[DEBUG] fetchAllConversations: returning \(results.count) conversations")
         return results
     }
 

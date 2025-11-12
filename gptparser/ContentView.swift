@@ -1,4 +1,24 @@
+import SwiftUI
 import SQLite
+// Helper to highlight search terms in a string for SwiftUI
+func highlightText(_ text: String, search: String) -> Text {
+    guard !search.isEmpty else { return Text(text) }
+    let lcText = text.lowercased()
+    let lcSearch = search.lowercased()
+    var result = Text("")
+    var currentIndex = lcText.startIndex
+    while let range = lcText.range(of: lcSearch, options: [], range: currentIndex..<lcText.endIndex) {
+        let before = String(text[currentIndex..<range.lowerBound])
+        if !before.isEmpty { result = result + Text(before) }
+        let match = String(text[range])
+        // Use .foregroundColor and .bold for highlight (Text modifiers only)
+        result = result + Text(match).foregroundColor(.black).bold()
+        currentIndex = range.upperBound
+    }
+    let after = String(text[currentIndex..<lcText.endIndex])
+    if !after.isEmpty { result = result + Text(after) }
+    return result
+}
 
 // Helper for chat message
 struct ChatMessage: Identifiable, Hashable {
@@ -30,43 +50,9 @@ func extractMessages(mapping: [String: AnyCodable]?) -> [ChatMessage] {
 //  gptparser
 //
 //  Created by Vineeth V R on 06/10/25.
-//
-
-import SwiftUI
-import UniformTypeIdentifiers
+// Removed highlightText function and String extension
 
 
-struct Conversation: Identifiable, Decodable {
-    let id: String
-    let title: String
-    let create_time: String?
-    let update_time: String?
-    let mapping: [String: AnyCodable]?
-    let folder_id: String?
-
-    private enum CodingKeys: String, CodingKey {
-        case id, title, create_time, update_time, mapping, folder_id
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decode(String.self, forKey: .id)
-        self.title = try container.decode(String.self, forKey: .title)
-        self.create_time = try? container.decode(String.self, forKey: .create_time)
-        self.update_time = try? container.decode(String.self, forKey: .update_time)
-        self.mapping = try? container.decodeIfPresent([String: AnyCodable].self, forKey: .mapping)
-        self.folder_id = try? container.decodeIfPresent(String.self, forKey: .folder_id)
-    }
-}
-
-extension Conversation: Hashable, Equatable {
-    static func == (lhs: Conversation, rhs: Conversation) -> Bool {
-        lhs.id == rhs.id
-    }
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-}
 // Helper to decode unknown JSON structure
 struct AnyCodable: Codable, CustomStringConvertible {
     var value: Any
@@ -130,10 +116,11 @@ struct AnyCodable: Codable, CustomStringConvertible {
         }
         return str
     }
-// End of AnyCodable
 }
 
 struct ContentView: SwiftUI.View {
+    // Explicit public default initializer for use in App
+    public init() {}
     // State for expanded/collapsed folders
     @State private var expandedFolders: Set<String> = []
 
@@ -208,9 +195,11 @@ struct ContentView: SwiftUI.View {
     // Returns conversations filtered by search results if search is active, otherwise all conversations
     func filteredConversations() -> [ConversationRecord] {
         if !searchText.isEmpty && !searchResults.isEmpty {
-            // Only show conversations that have a search result
-            return conversations.filter { searchResults[$0.id] != nil }
+            let filtered = conversations.filter { searchResults[$0.id] != nil }
+            print("[DEBUG] filteredConversations: searchText=\(searchText), filtered count=\(filtered.count)")
+            return filtered
         } else {
+            print("[DEBUG] filteredConversations: returning all conversations (count=\(conversations.count))")
             return conversations
         }
     }
@@ -261,28 +250,159 @@ struct ContentView: SwiftUI.View {
     // MARK: - Search functionality
     func performSearch() {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[DEBUG] performSearch called. searchText=\(searchText), trimmed=\(trimmed)")
         if trimmed.isEmpty {
+            print("[DEBUG] Search text is empty. Clearing searchResults.")
             searchResults = [:]
             return
         }
-        let ftsResults = SQLiteManager.shared.searchMessagesFTS(query: trimmed)
+        var query = trimmed
+        // If the search contains spaces, treat as a phrase search
+        if query.contains(" ") {
+            query = "\"" + query + "\""
+        }
+        print("[DEBUG] FTS query (no wildcards): \(query)")
+        let ftsResults = SQLiteManager.shared.searchMessagesFTS(query: query)
+        print("[DEBUG] FTS returned \(ftsResults.count) results.")
+        // Collect conversation IDs from FTS
+        let ftsConversationIds = Set(ftsResults.map { $0.conversationId })
+        // Collect conversation IDs from title search (case-insensitive contains)
+        let titleConversationIds = Set(conversations.filter { $0.title.lowercased().contains(trimmed) }.map { $0.id })
+        // Union of both
+    _ = ftsConversationIds.union(titleConversationIds)
         var resultsDict: [String: (content: String, score: Double)] = [:]
+        // For FTS matches, store the first matching message content
         for result in ftsResults {
-            // Only show the first matching message per conversation
             if resultsDict[result.conversationId] == nil {
                 resultsDict[result.conversationId] = (content: result.content, score: 1.0)
             }
         }
+        // For title matches only, store empty content
+        for id in titleConversationIds where resultsDict[id] == nil {
+            resultsDict[id] = (content: "", score: 1.0)
+        }
+        print("[DEBUG] searchResults keys: \(resultsDict.keys)")
         searchResults = resultsDict
     }
     
     var body: some SwiftUI.View {
         let dbPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first!.appending("/conversations.sqlite3")
-        VStack(spacing: 0) {
+    VStack(spacing: 0) {
+        }
+        .onAppear {
+            loadConversationsFromDB()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                print("[DEBUG] fileImporter: .success, urls=\(urls)")
+                guard let url = urls.first else {
+                    print("[DEBUG] fileImporter: no url selected")
+                    showEmptyAlert = true
+                    return
+                }
+                var didAccess = url.startAccessingSecurityScopedResource()
+                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let data = try Data(contentsOf: url)
+                    print("[DEBUG] fileImporter: data read, size=\(data.count)")
+                    guard !data.isEmpty else {
+                        print("[DEBUG] fileImporter: data is empty")
+                        showEmptyAlert = true
+                        return
+                    }
+                    let json = try JSONSerialization.jsonObject(with: data)
+                    print("[DEBUG] fileImporter: JSON parsed, type=\(type(of: json))")
+                    // Robustly support both {conversations: [...]} and plain array root
+                    var conversationsArray: [[String: Any]] = []
+                    var foldersArray: [[String: Any]]? = nil
+                    if let rootDict = json as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]] {
+                        conversationsArray = arr
+                        foldersArray = rootDict["folders"] as? [[String: Any]]
+                        print("[DEBUG] JSON root is object, conversations count: \(conversationsArray.count)")
+                    } else if let arr = json as? [[String: Any]] {
+                        conversationsArray = arr
+                        print("[DEBUG] JSON root is array, conversations count: \(conversationsArray.count)")
+                    } else {
+                        print("[DEBUG] JSON root is invalid: \(type(of: json))")
+                        showInvalidAlert = true
+                        return
+                    }
+                    // Insert folders if present
+                    if let foldersArray = foldersArray {
+                        for folder in foldersArray {
+                            guard let folderId = folder["id"] as? String,
+                                  let folderName = folder["name"] as? String else { continue }
+                            let conversationIds: [String]
+                            if let ids = folder["conversation_ids"] as? [String] {
+                                conversationIds = ids
+                            } else if let ids = folder["conversation_ids"] as? [Any] {
+                                conversationIds = ids.compactMap { $0 as? String }
+                            } else {
+                                conversationIds = []
+                            }
+                            SQLiteManager.shared.upsertFolder(id: folderId, name: folderName, conversationIds: conversationIds)
+                        }
+                    }
+                    // Debug: print conversationsArray count and sample
+                    print("[DEBUG] conversationsArray count: \(conversationsArray.count)")
+                    for (i, dict) in conversationsArray.prefix(3).enumerated() {
+                        print("[DEBUG] conversationsArray[\(i)]: \(dict)")
+                    }
+                    // Insert conversations
+                    for dict in conversationsArray {
+                        guard let id = dict["id"] as? String,
+                              let title = dict["title"] as? String else { continue }
+                        let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
+                        let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
+                        let folderId = dict["folder_id"] as? String
+                        let convo = ConversationRecord(
+                            id: id,
+                            title: title,
+                            createTime: dict["create_time"] as? String,
+                            updateTime: dict["update_time"] as? String,
+                            mapping: mappingStr,
+                            tags: [],
+                            folderId: folderId
+                        )
+                        SQLiteManager.shared.upsertConversation(convo)
+                        // Insert messages into FTS table
+                        if let mapping = dict["mapping"] as? [String: Any] {
+                            for (msgId, nodeAny) in mapping {
+                                guard let node = nodeAny as? [String: Any],
+                                      let message = node["message"] as? [String: Any],
+                                      let authorDict = message["author"] as? [String: Any],
+                                      let role = authorDict["role"] as? String,
+                                      let contentDict = message["content"] as? [String: Any],
+                                      let parts = contentDict["parts"] as? [Any],
+                                      let text = parts.first as? String else { continue }
+                                SQLiteManager.shared.insertMessageFTS(messageId: msgId, conversationId: id, author: role, content: text)
+                            }
+                        }
+                    }
+                    // Reload from DB
+                    loadConversationsFromDB()
+                    isLoading = false
+                } catch {
+                    print("[DEBUG] fileImporter: error: \(error)")
+                    errorDetails = error.localizedDescription
+                    isLoading = false
+                    showInvalidAlert = true
+                }
+            case .failure(let err):
+                print("[DEBUG] fileImporter: .failure, error=\(err)")
+                showInvalidAlert = true
+            }
+        }
             // Top bar: Open button, search bar, and tag UI
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("DB Path:")
+
                         .font(.caption2)
                         .foregroundColor(.secondary)
                     Text(dbPath)
@@ -311,7 +431,11 @@ struct ContentView: SwiftUI.View {
                     TextField("Search conversations...", text: $searchText)
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 180, maxWidth: 260)
-                        .onChange(of: searchText) { self.performSearch() }
+                        .onSubmit { self.performSearch() }
+                    Button(action: { self.performSearch() }) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .foregroundColor(.accentColor)
+                    }
                     if !searchText.isEmpty {
                         Button(action: {
                             searchText = ""
@@ -375,7 +499,7 @@ struct ContentView: SwiftUI.View {
                     // Sidebar: Only folders and their conversations
                     List {
                         let folders = fetchAllFolders()
-                        let (grouped, ungrouped) = groupConversationsByFolder(conversations: conversations, folders: folders)
+                        let (grouped, ungrouped) = groupConversationsByFolder(conversations: filteredConversations(), folders: folders)
                         // Folders as expandable/collapsible
                         ForEach(grouped, id: \.folder.id) { group in
                             // Folder header (expand/collapse on tap)
@@ -495,178 +619,70 @@ struct ContentView: SwiftUI.View {
                                     Text("No conversation content available.")
                                         .foregroundColor(.secondary)
                                 } else {
-                                    ScrollView {
-                                        VStack(alignment: .leading, spacing: 12) {
-                                            ForEach(messages) { msg in
-                                                HStack {
-                                                    if msg.author == "user" {
-                                                        Text(msg.content)
-                                                            .padding(10)
-                                                            .background(Color.blue.opacity(0.2))
-                                                            .cornerRadius(12)
+                                    ScrollViewReader { scrollProxy in
+                                        ScrollView {
+                                            VStack(alignment: .leading, spacing: 12) {
+                                                let lowerSearch = searchText.lowercased()
+                                                let matchIndices = !lowerSearch.isEmpty ? messages.enumerated().compactMap { idx, msg in msg.content.lowercased().contains(lowerSearch) ? idx : nil } : []
+                                                ForEach(Array(messages.enumerated()), id: \.offset) { pair in
+                                                    let idx = pair.offset
+                                                    let msg = pair.element
+                                                    let isMatch = !lowerSearch.isEmpty && msg.content.lowercased().contains(lowerSearch)
+                                                    let isFirstMatch = isMatch && matchIndices.first == idx
+                                                    HStack {
+                                                        if msg.author == "user" {
+                                                            ZStack(alignment: .leading) {
+                                                                RoundedRectangle(cornerRadius: 12)
+                                                                    .fill(isMatch ? Color.yellow.opacity(0.6) : Color.blue.opacity(0.2))
+                                                                highlightText(msg.content, search: lowerSearch)
+                                                                    .padding(10)
+                                                            }
                                                             .frame(maxWidth: 350, alignment: .leading)
-                                                        Spacer()
-                                                    } else {
-                                                        Spacer()
-                                                        Text(msg.content)
-                                                            .padding(10)
-                                                            .background(Color.green.opacity(0.2))
-                                                            .cornerRadius(12)
+                                                            .id(isFirstMatch ? "firstMatch" : nil)
+                                                            Spacer()
+                                                        } else {
+                                                            Spacer()
+                                                            ZStack(alignment: .trailing) {
+                                                                RoundedRectangle(cornerRadius: 12)
+                                                                    .fill(isMatch ? Color.yellow.opacity(0.6) : Color.green.opacity(0.2))
+                                                                highlightText(msg.content, search: lowerSearch)
+                                                                    .padding(10)
+                                                            }
                                                             .frame(maxWidth: 1000, alignment: .trailing)
+                                                            .id(isFirstMatch ? "firstMatch" : nil)
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                        .padding(.top, 8)
-                                    }
-                                }
-                            } else {
-                                Text("No conversation content available.")
-                                    .foregroundColor(.secondary)
-                            }
-                        } else {
-                            Text("Select a conversation from the left pane.")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    Spacer()
-                }
-            }
-            .onAppear(perform: loadConversationsFromDB)
-            .fileImporter(
-                isPresented: $showFileImporter,
-                allowedContentTypes: [UTType.json],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    if let url = urls.first {
-                        isLoading = true
-                        Task {
-                            let didAccess = url.startAccessingSecurityScopedResource()
-                            defer {
-                                if didAccess { url.stopAccessingSecurityScopedResource() }
-                            }
-                            do {
-                                let data = try Data(contentsOf: url)
-                                if data.isEmpty {
-                                    await MainActor.run {
-                                        isLoading = false
-                                        showEmptyAlert = true
-                                    }
-                                    return
-                                }
-                                let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-                                // Support both {conversations: [...]} and plain array formats
-                                let conversationsArray: [[String: Any]]
-                                var foldersArray: [[String: Any]]? = nil
-                                if let rootDict = jsonObject as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]] {
-                                    conversationsArray = arr
-                                    foldersArray = rootDict["folders"] as? [[String: Any]]
-                                } else if let arr = jsonObject as? [[String: Any]] {
-                                    conversationsArray = arr
-                                } else {
-                                    await MainActor.run {
-                                        errorDetails = "Root is not a valid ChatGPT export (missing 'conversations' or array root)."
-                                        isLoading = false
-                                        showInvalidAlert = true
-                                    }
-                                    return
-                                }
-                                // Insert folders
-                                if let foldersArray = foldersArray {
-                                    for folder in foldersArray {
-                                        guard let folderId = folder["id"] as? String,
-                                              let folderName = folder["name"] as? String else {
-                                            continue
-                                        }
-                                        // Extract conversation_ids as [String]
-                                        let conversationIds: [String]
-                                        if let ids = folder["conversation_ids"] as? [String] {
-                                            conversationIds = ids
-                                        } else if let ids = folder["conversation_ids"] as? [Any] {
-                                            conversationIds = ids.compactMap { $0 as? String }
-                                        } else {
-                                            conversationIds = []
-                                        }
-                                        SQLiteManager.shared.upsertFolder(id: folderId, name: folderName, conversationIds: conversationIds)
-                                    }
-                                }
-                                // Debug: Print all folders after import
-                                let allFolders = SQLiteManager.shared.fetchFolders()
-                                print("[DEBUG] Folders in DB after import:")
-                                for folder in allFolders {
-                                    print("  id: \(folder.id), name: \(folder.name)")
-                                }
-                                // Insert conversations
-                                for dict in conversationsArray {
-                                    guard let id = dict["id"] as? String,
-                                          let title = dict["title"] as? String else { continue }
-                                    let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
-                                    let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
-                                    let folderId = dict["folder_id"] as? String
-                                    let convo = ConversationRecord(
-                                        id: id,
-                                        title: title,
-                                        createTime: dict["create_time"] as? String,
-                                        updateTime: dict["update_time"] as? String,
-                                        mapping: mappingStr,
-                                        tags: [],
-                                        folderId: folderId
-                                    )
-                                    SQLiteManager.shared.upsertConversation(convo)
-                                    // Insert messages into FTS table
-                                    if let mapping = dict["mapping"] as? [String: Any] {
-                                        for (msgId, nodeAny) in mapping {
-                                            guard let node = nodeAny as? [String: Any],
-                                                  let message = node["message"] as? [String: Any],
-                                                  let authorDict = message["author"] as? [String: Any],
-                                                  let role = authorDict["role"] as? String,
-                                                  let contentDict = message["content"] as? [String: Any],
-                                                  let parts = contentDict["parts"] as? [Any],
-                                                  let text = parts.first as? String else { continue }
-                                            SQLiteManager.shared.insertMessageFTS(messageId: msgId, conversationId: id, author: role, content: text)
+                                            .padding(.top, 8)
+                                            .onAppear {
+                                                withAnimation {
+                                                    scrollProxy.scrollTo("firstMatch", anchor: .center)
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                                await MainActor.run {
-                                    loadConversationsFromDB()
-                                    isLoading = false
-                                }
-                            } catch {
-                                await MainActor.run {
-                                    errorDetails = error.localizedDescription
-                                    isLoading = false
-                                    showInvalidAlert = true
-                                }
+                                // ...existing code...
                             }
                         }
                     }
-                case .failure(_):
-                    showInvalidAlert = true
-                }
-            }
-            .alert("File is empty", isPresented: $showEmptyAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("The selected file is empty.")
-            }
-            .alert("Unable to parse file", isPresented: $showInvalidAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                if errorDetails.isEmpty {
-                    Text("The selected file could not be parsed as a ChatGPT conversation JSON file.")
-                } else {
-                    Text("The selected file could not be parsed as a ChatGPT conversation JSON file.\nError: \(errorDetails)")
                 }
             }
         }
-        
-        private func loadConversationsFromDB() {
-            conversations = SQLiteManager.shared.fetchAllConversations()
-            if let first = conversations.first {
-                selectedConversationId = first.id
-            }
+
+// Helper to reload conversations from DB (outside the view body)
+private extension ContentView {
+    func loadConversationsFromDB() {
+        conversations = SQLiteManager.shared.fetchAllConversations()
+        print("[DEBUG] loadConversationsFromDB: loaded \(conversations.count) conversations")
+        for convo in conversations {
+            print("[DEBUG] convo: id=\(convo.id), title=\(convo.title), folderId=\(String(describing: convo.folderId)), tags=\(convo.tags)")
+        }
+        if let first = conversations.first {
+            selectedConversationId = first.id
         }
     }
+}
+                                
+
