@@ -289,6 +289,15 @@ struct ContentView: SwiftUI.View {
         let dbPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first!.appending("/conversations.sqlite3")
     VStack(spacing: 0) {
         }
+        .alert("Unable to parse file", isPresented: $showInvalidAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if errorDetails.isEmpty {
+                Text("The selected file could not be parsed as a ChatGPT conversation JSON file.")
+            } else {
+                Text(errorDetails)
+            }
+        }
         .onAppear {
             loadConversationsFromDB()
         }
@@ -320,15 +329,17 @@ struct ContentView: SwiftUI.View {
                     // Robustly support both {conversations: [...]} and plain array root
                     var conversationsArray: [[String: Any]] = []
                     var foldersArray: [[String: Any]]? = nil
-                    if let rootDict = json as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]] {
+                    if let rootDict = json as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]], !arr.isEmpty {
                         conversationsArray = arr
                         foldersArray = rootDict["folders"] as? [[String: Any]]
                         print("[DEBUG] JSON root is object, conversations count: \(conversationsArray.count)")
-                    } else if let arr = json as? [[String: Any]] {
+                    } else if let arr = json as? [[String: Any]], !arr.isEmpty,
+                              arr.first?["id"] != nil, arr.first?["title"] != nil {
                         conversationsArray = arr
                         print("[DEBUG] JSON root is array, conversations count: \(conversationsArray.count)")
                     } else {
-                        print("[DEBUG] JSON root is invalid: \(type(of: json))")
+                        print("[DEBUG] JSON root is invalid or missing required keys: \(type(of: json))")
+                        errorDetails = "The selected file is not a valid ChatGPT conversation export."
                         showInvalidAlert = true
                         return
                     }
