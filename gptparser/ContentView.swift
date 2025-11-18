@@ -146,20 +146,20 @@ struct ContentView: SwiftUI.View {
         .contentShape(Rectangle())
         .onTapGesture { onToggle() }
     }
-    // Helper view for rendering a tag button in the right panel
+    // Helper view for rendering a tag chip (for tag filters)
     @ViewBuilder
-    private func TagButton(tag: String?, isSelected: Bool, action: @escaping () -> Void) -> some SwiftUI.View {
-        Button(action: action) {
-            HStack {
-                Text(tag ?? "All")
-                    .fontWeight(isSelected ? .bold : .regular)
-                Spacer()
-            }
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
-            .cornerRadius(8)
+    private func TagChip(tag: String, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
+        Button(action: onSelect) {
+            Text(tag)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(isSelected ? .white : .primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(isSelected ? Color.accentColor : Color.gray.opacity(0.13))
+                .cornerRadius(12)
         }
+        .buttonStyle(.plain)
     }
     // Helper view for rendering chat messages
     @ViewBuilder
@@ -416,51 +416,7 @@ struct ContentView: SwiftUI.View {
                         }
                     }
                 }
-                // Tag chips for selected conversation
-                if let convo = selectedConversation {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            ForEach(convo.tags, id: \ .self) { tag in
-                                HStack(spacing: 4) {
-                                    Text(tag)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.gray.opacity(0.2))
-                                        .cornerRadius(10)
-                                    Button(action: {
-                                        self.removeTag(tag, from: convo)
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .font(.caption2)
-                                            .foregroundColor(.red)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            // Add tag field
-                            HStack(spacing: 4) {
-                                TextField("Add tag", text: $newTagText)
-                                    .font(.caption)
-                                    .frame(minWidth: 60, maxWidth: 100)
-                                    .textFieldStyle(.roundedBorder)
-                                    .focused($tagFieldFocused)
-                                    .onSubmit {
-                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                    }
-                                Button(action: {
-                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                }) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(.accentColor)
-                                }
-                                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                    .frame(height: 32)
-                }
+                // (Removed add tag and tag chips from top bar)
                 Spacer()
             }
             Divider()
@@ -557,26 +513,112 @@ struct ContentView: SwiftUI.View {
                     }
                 }
                 Divider()
-                // Right tag panel
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Tags")
+                // Right tag panel: Recently used tags, all tags, and add tag
+                VStack(alignment: .leading, spacing: 20) {
+                    // Tag Filters (show only the selected tag as chip)
+                    Text("Tag Filters")
                         .font(.headline)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 12)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 4) {
-                            TagButton(tag: nil, isSelected: selectedTag == nil) { selectedTag = nil }
-                            ForEach(allTags, id: \ .self) { tag in
-                                TagButton(tag: tag, isSelected: selectedTag == tag) { selectedTag = tag }
+                        .padding(.top, 16)
+                        .padding(.horizontal, 16)
+                    HStack(spacing: 10) {
+                        if let tag = selectedTag, !tag.isEmpty {
+                            TagChip(tag: tag, isSelected: true) {
+                                selectedTag = nil
                             }
+                        } else {
+                            Text("(None)")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.bottom, 8)
+                    }
+                    .padding(.horizontal, 16)
+                    // Clear Tag Filter Button
+                    if selectedTag != nil {
+                        Button(action: { selectedTag = nil }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                                Text("Clear Tag Filter")
+                                    .font(.body)
+                            }
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 12)
+                            .background(Color.gray.opacity(0.13))
+                            .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                    }
+                    // All Tags
+                    Text("All Tags")
+                        .font(.headline)
+                        .padding(.horizontal, 16)
+                    GeometryReader { geo in
+                        ScrollView {
+                            let columns = [GridItem(.adaptive(minimum: 90, maximum: 140), spacing: 10)]
+                            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                                ForEach(allTags, id: \ .self) { tag in
+                                    Button(action: { selectedTag = tag }) {
+                                        Text(tag)
+                                            .font(.body)
+                                            .foregroundColor(selectedTag == tag ? .white : .primary)
+                                            .padding(.vertical, 6)
+                                            .padding(.horizontal, 12)
+                                            .background(selectedTag == tag ? Color.accentColor : Color.gray.opacity(0.13))
+                                            .cornerRadius(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                        }
+                        .frame(height: max(geo.size.height * 0.5, 120))
+                    }
+                    // Add Tag Field (horizontal, production look)
+                    HStack(spacing: 8) {
+                        TextField("Add tag", text: $newTagText)
+                            .font(.body)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .background(Color.gray.opacity(0.13))
+                            .cornerRadius(8)
+                            .focused($tagFieldFocused)
+                            .onSubmit {
+                                if let convo = selectedConversation {
+                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                    updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                }
+                            }
+                        Button(action: {
+                            if let convo = selectedConversation {
+                                self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                            }
+                        }) {
+                            Text("Add")
+                                .font(.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 20)
+                                .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
+                                .cornerRadius(8)
+                        }
+                        .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 16)
+                    if let tagError = tagError {
+                        Text(tagError)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 16)
                     }
                     Spacer()
                 }
-                .frame(width: 140)
-                .background(Color.gray.opacity(0.08))
+                .frame(width: 260)
+                .background(Color(NSColor.windowBackgroundColor))
             }
         }
         .alert("Unable to parse file", isPresented: $showInvalidAlert) {
