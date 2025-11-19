@@ -282,6 +282,7 @@ struct ContentView: SwiftUI.View {
                             .foregroundColor(.red)
                             .cornerRadius(8)
                     }
+                    .disabled(conversations.isEmpty)
                 }
                 .padding(.leading, 18)
                 Spacer()
@@ -293,11 +294,13 @@ struct ContentView: SwiftUI.View {
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 220, maxWidth: 340)
                         .onSubmit { self.performSearch() }
+                        .disabled(conversations.isEmpty)
                     Button(action: { self.performSearch() }) {
                         Image(systemName: "arrow.right.circle.fill")
                             .foregroundColor(.accentColor)
                             .font(.title3)
                     }
+                    .disabled(conversations.isEmpty)
                     if !searchText.isEmpty {
                         Button(action: {
                             searchText = ""
@@ -306,6 +309,7 @@ struct ContentView: SwiftUI.View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.gray)
                         }
+                        .disabled(conversations.isEmpty)
                     }
                 }
                 .padding(.vertical, 10)
@@ -321,36 +325,29 @@ struct ContentView: SwiftUI.View {
             // Main content: two-pane layout
             HStack(spacing: 0) {
                 // Sidebar: Only folders and their conversations
-                VStack {
-                    // Debug prints for sidebar state (removed from ViewBuilder context)
-                    List {
-                        // Folders as expandable/collapsible
-                        if !sidebarGrouped.isEmpty {
-                            SidebarFolderGroupsView
-                        }
-                        // If there are ungrouped conversations and no folders, show them directly (no Section)
-                        if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                            SidebarUngroupedView
-                        }
-                        // If there are both folders and ungrouped, show ungrouped in a Section
-                        if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                            Section(header: Text("Ungrouped").font(.headline)) {
+                if !conversations.isEmpty {
+                    VStack {
+                        List {
+                            // Folders as expandable/collapsible
+                            if !sidebarGrouped.isEmpty {
+                                SidebarFolderGroupsView
+                            }
+                            // If there are ungrouped conversations and no folders, show them directly (no Section)
+                            if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
                                 SidebarUngroupedView
                             }
-                        }
-                        // If there are no folders and no ungrouped, show a placeholder
-                        if sidebarGrouped.isEmpty && sidebarUngrouped.isEmpty {
-                            Text("No conversations found.")
-                                .foregroundColor(.secondary)
-                                .padding()
+                            // If there are both folders and ungrouped, show ungrouped in a Section
+                            if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
+                                Section(header: Text("Ungrouped").font(.headline)) {
+                                    SidebarUngroupedView
+                                }
+                            }
                         }
                     }
-
+                    .frame(width: 250)
                 }
-                .frame(width: 250)
-                Divider()
                 // Central pane
-                VStack(alignment: .leading) {
+                VStack(alignment: .center) {
                     if isLoading {
                         Spacer()
                         HStack {
@@ -359,6 +356,27 @@ struct ContentView: SwiftUI.View {
                                 .progressViewStyle(CircularProgressViewStyle())
                             Spacer()
                         }
+                        Spacer()
+                    } else if conversations.isEmpty {
+                        Spacer()
+                        VStack(spacing: 18) {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .resizable()
+                                .frame(width: 54, height: 54)
+                                .foregroundColor(.accentColor.opacity(0.25))
+                            Text("No conversations loaded.")
+                                .font(.title2)
+                                .foregroundColor(.secondary)
+                            Text("Click 'Open' to import your ChatGPT conversation JSON file.")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                            Divider().padding(.vertical, 8)
+                            Text("Tip: You can export your conversations from ChatGPT or Gemini and import them here. For more help, see the documentation or FAQ.")
+                                .font(.footnote)
+                                .foregroundColor(.gray)
+                        }
+                        .frame(maxWidth: 400)
+                        .multilineTextAlignment(.center)
                         Spacer()
                     } else if let convo = selectedConversation {
                         Text(convo.title)
@@ -389,97 +407,99 @@ struct ContentView: SwiftUI.View {
                 }
                 Divider()
                 // Right tag panel: Recently used tags, all tags, and add tag
-                VStack(alignment: .leading, spacing: 20) {
-                    // Tag Filters (show only the selected tag as chip)
-                    Text("Tag Filters")
-                        .font(.headline)
-                        .padding(.top, 16)
-                        .padding(.horizontal, 16)
-                    HStack(spacing: 10) {
-                        if let tag = selectedTag, !tag.isEmpty {
-                            TagChip(tag: tag, isSelected: true) {
-                                selectedTag = nil
-                            }
-                        } else {
-                            Text("(None)")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    // Clear Tag Filter Button
-                    if selectedTag != nil {
-                        Button(action: { selectedTag = nil }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                                Text("Clear Tag Filter")
-                                    .font(.body)
-                            }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 12)
-                            .background(Color.gray.opacity(0.13))
-                            .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 16)
-                    }
-                    // All Tags
-                    Text("All Tags")
-                        .font(.headline)
-                        .padding(.horizontal, 16)
-                    GeometryReader { geo in
-                        ScrollView {
-                            TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
-                                selectedTag = tag
+                if !conversations.isEmpty {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Tag Filters (show only the selected tag as chip)
+                        Text("Tag Filters")
+                            .font(.headline)
+                            .padding(.top, 16)
+                            .padding(.horizontal, 16)
+                        HStack(spacing: 10) {
+                            if let tag = selectedTag, !tag.isEmpty {
+                                TagChip(tag: tag, isSelected: true) {
+                                    selectedTag = nil
+                                }
+                            } else {
+                                Text("(None)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
                             }
                         }
-                        .frame(height: max(geo.size.height * 0.5, 120))
-                    }
-                    // Add Tag Field (horizontal, production look)
-                    HStack(spacing: 8) {
-                        TextField("Add tag", text: $newTagText)
-                            .font(.body)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 14)
-                            .background(Color.gray.opacity(0.13))
-                            .cornerRadius(8)
-                            .focused($tagFieldFocused)
-                            .onSubmit {
+                        .padding(.horizontal, 16)
+                        // Clear Tag Filter Button
+                        if selectedTag != nil {
+                            Button(action: { selectedTag = nil }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                    Text("Clear Tag Filter")
+                                        .font(.body)
+                                }
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 12)
+                                .background(Color.gray.opacity(0.13))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16)
+                        }
+                        // All Tags
+                        Text("All Tags")
+                            .font(.headline)
+                            .padding(.horizontal, 16)
+                        GeometryReader { geo in
+                            ScrollView {
+                                TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
+                                    selectedTag = tag
+                                }
+                            }
+                            .frame(height: max(geo.size.height * 0.5, 120))
+                        }
+                        // Add Tag Field (horizontal, production look)
+                        HStack(spacing: 8) {
+                            TextField("Add tag", text: $newTagText)
+                                .font(.body)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 14)
+                                .background(Color.gray.opacity(0.13))
+                                .cornerRadius(8)
+                                .focused($tagFieldFocused)
+                                .onSubmit {
+                                    if let convo = selectedConversation {
+                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                        updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                    }
+                                }
+                            Button(action: {
                                 if let convo = selectedConversation {
                                     self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
                                     updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
                                 }
+                            }) {
+                                Text("Add")
+                                    .font(.body)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 20)
+                                    .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
+                                    .cornerRadius(8)
                             }
-                        Button(action: {
-                            if let convo = selectedConversation {
-                                self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
-                            }
-                        }) {
-                            Text("Add")
-                                .font(.body)
-                                .fontWeight(.medium)
-                                .foregroundColor(.white)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 20)
-                                .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
-                                .cornerRadius(8)
+                            .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
                         }
-                        .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        if let tagError = tagError {
+                            Text(tagError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding(.horizontal, 16)
+                        }
+                        Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
-                    if let tagError = tagError {
-                        Text(tagError)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 16)
-                    }
-                    Spacer()
+                    .frame(width: 260)
+                    .background(Color(NSColor.windowBackgroundColor))
                 }
-                .frame(width: 260)
-                .background(Color(NSColor.windowBackgroundColor))
             }
         }
         // Attach all view modifiers to the main VStack
