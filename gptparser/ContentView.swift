@@ -1,6 +1,12 @@
 import SwiftUI
 import SQLite
 
+// FolderInfo struct for folder grouping
+struct FolderInfo: Identifiable, Hashable {
+    let id: String
+    let name: String
+}
+
 // Helper for chat message
 struct ChatMessage: Identifiable, Hashable {
     let id: String
@@ -30,6 +36,7 @@ struct AnyCodable: Codable, CustomStringConvertible {
             value = ""
         }
     }
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         if let intValue = value as? Int {
@@ -51,6 +58,7 @@ struct AnyCodable: Codable, CustomStringConvertible {
             throw EncodingError.invalidValue(value, context)
         }
     }
+
     var description: String {
         if let dict = value as? [String: Any] {
             return prettyPrint(dict)
@@ -60,6 +68,7 @@ struct AnyCodable: Codable, CustomStringConvertible {
             return String(describing: value)
         }
     }
+
     private func prettyPrint(_ dict: [String: Any]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
               let str = String(data: data, encoding: .utf8) else {
@@ -107,115 +116,127 @@ func extractMessages(mapping: [String: AnyCodable]?) -> [ChatMessage] {
 }
 
 struct ContentView: SwiftUI.View {
-    // Helper view for rendering a conversation row in the sidebar
-    @ViewBuilder
-    private func ConversationRow(convo: ConversationRecord, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(convo.title)
-                .fontWeight(isSelected ? .bold : .regular)
-            if !convo.tags.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(convo.tags, id: \ .self) { tag in
-                        Text(tag)
-                            .font(.caption2)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.gray.opacity(0.15))
-                            .cornerRadius(8)
-                    }
-                }
-            }
+    // Add a tag to a conversation and update UI
+    private func addTag(_ tag: String, to convo: ConversationRecord) {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if convo.tags.contains(trimmed) {
+            tagError = "Tag already exists."
+            newTagText = ""
+            return
         }
-        .padding(.vertical, 3)
-        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.clear)
-        .cornerRadius(6)
-        .contentShape(Rectangle())
-        .onTapGesture { onSelect() }
+        SQLiteManager.shared.addTag(trimmed, to: convo.id)
+        reloadSelectedConversationTags()
+        newTagText = ""
+        tagFieldFocused = true
     }
 
-    // Helper view for rendering a folder header in the sidebar
-    @ViewBuilder
-    private func FolderHeader(folder: FolderInfo, isExpanded: Bool, onToggle: @escaping () -> Void) -> some SwiftUI.View {
-        HStack {
-            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                .foregroundColor(.accentColor)
-            Text(folder.name)
-                .font(.headline)
-            Spacer()
+    // Reload tags for the selected conversation
+    private func reloadSelectedConversationTags() {
+        guard let convo = selectedConversation else { return }
+        let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
+        if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
+            conversations[idx].tags = updatedTags
         }
-        .contentShape(Rectangle())
-        .onTapGesture { onToggle() }
     }
-    // Helper view for rendering a tag chip (for tag filters)
+    // Helper view for rendering the tag grid in the right tag panel
     @ViewBuilder
-    private func TagChip(tag: String, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
-        Button(action: onSelect) {
-            Text(tag)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(isSelected ? .white : .primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(isSelected ? Color.accentColor : Color.gray.opacity(0.13))
-                .cornerRadius(12)
+    private func TagGridView(selectedTag: String?, allTags: [String], onSelect: @escaping (String) -> Void) -> some SwiftUI.View {
+        let columns = [GridItem(.adaptive(minimum: 90, maximum: 140), spacing: 10)]
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+            ForEach(allTags, id: \ .self) { tag in
+                Button(action: { onSelect(tag) }) {
+                    Text(tag)
+                        .font(.body)
+                        .foregroundColor(selectedTag == tag ? .white : .primary)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(selectedTag == tag ? Color.accentColor : Color.gray.opacity(0.13))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
-    // Helper view for rendering chat messages
+    // Helper view for rendering the scrollable messages area in the central pane
     @ViewBuilder
-    private func MessagesView(messages: [ChatMessage], searchText: String) -> some SwiftUI.View {
-        let lowerSearch = searchText.lowercased()
-        let matchIndices = !lowerSearch.isEmpty ? messages.enumerated().compactMap { idx, msg in msg.content.lowercased().contains(lowerSearch) ? idx : nil } : []
-        ForEach(Array(messages.enumerated()), id: \ .offset) { pair in
-            let idx = pair.offset
-            let msg = pair.element
-            let isMatch = !lowerSearch.isEmpty && msg.content.lowercased().contains(lowerSearch)
-            let isFirstMatch = isMatch && matchIndices.first == idx
-            HStack {
-                if msg.author == "user" {
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.blue.opacity(0.2))
-                        highlightText(msg.content, search: lowerSearch)
-                            .padding(10)
-                    }
-                    .frame(maxWidth: 350, alignment: .leading)
-                    .id(isFirstMatch ? "firstMatch" : nil)
-                    Spacer()
-                } else {
-                    Spacer()
-                    ZStack(alignment: .trailing) {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.green.opacity(0.2))
-                        highlightText(msg.content, search: lowerSearch)
-                            .padding(10)
-                    }
-                    .frame(maxWidth: 1000, alignment: .trailing)
-                    .id(isFirstMatch ? "firstMatch" : nil)
+    private func CentralMessagesScrollView(messages: [ChatMessage], searchText: String) -> some SwiftUI.View {
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                CentralMessagesSection(messages: messages, searchText: searchText)
+            }
+            .onAppear {
+                withAnimation {
+                    scrollProxy.scrollTo("firstMatch", anchor: .center)
                 }
             }
         }
     }
-    // Helper: Fetch all unique tags from all conversations
-    private var allTags: [String] {
-        let tags = conversations.flatMap { $0.tags }
-        return Array(Set(tags)).sorted()
-    }
-    // MARK: - Load Conversations
-    func loadConversationsFromDB() {
-        self.conversations = SQLiteManager.shared.fetchAllConversations()
-        print("[DEBUG] loadConversationsFromDB: loaded \(conversations.count) conversations")
-        for convo in conversations {
-            print("[DEBUG] convo: id=\(convo.id), title=\(convo.title), folderId=\(String(describing: convo.folderId)), tags=\(convo.tags)")
+    // Helper view for rendering the messages section in the central pane
+    @ViewBuilder
+    private func CentralMessagesSection(messages: [ChatMessage], searchText: String) -> some SwiftUI.View {
+        VStack(alignment: .leading, spacing: 12) {
+            MessagesForEachView(messages: messages, searchText: searchText)
         }
-        if let first = conversations.first {
-            selectedConversationId = first.id
+        .padding(.top, 8)
+    }
+    // Helper view for rendering ungrouped conversations in the sidebar
+    private var SidebarUngroupedView: some SwiftUI.View {
+        ForEach(sidebarUngrouped, id: \.id) { convo in
+            let isSelected = selectedConversationId == convo.id
+            ConversationRow(convo: convo, isSelected: isSelected) {
+                selectedConversationId = convo.id
+            }
         }
     }
-    // MARK: - State
+    // Helper view for rendering all folder groups in the sidebar
+    private var SidebarFolderGroupsView: some SwiftUI.View {
+        ForEach(sidebarGrouped, id: \ .folder.id) { group in
+            SidebarFolderGroupView(group: group)
+        }
+    }
+
+    // Helper view for rendering a single folder group
+    private func SidebarFolderGroupView(group: (folder: FolderInfo, conversations: [ConversationRecord])) -> some SwiftUI.View {
+        let isExpanded = expandedFolders.contains(group.folder.id)
+        return Group {
+            FolderHeader(folder: group.folder, isExpanded: isExpanded) {
+                if isExpanded {
+                    expandedFolders.remove(group.folder.id)
+                } else {
+                    expandedFolders.insert(group.folder.id)
+                    updateRecentFolders(with: group.folder.id)
+                }
+            }
+            if isExpanded {
+                ForEach(group.conversations, id: \ .id) { convo in
+                    let isSelected = selectedConversationId == convo.id
+                    HStack {
+                        Spacer().frame(width: 18)
+                        ConversationRow(convo: convo, isSelected: isSelected) {
+                            selectedConversationId = convo.id
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // --- Sidebar Data Computed Properties ---
+    private var sidebarFolders: [FolderInfo] { fetchAllFolders() }
+    private var sidebarFiltered: [ConversationRecord] { filteredConversations() }
+    private var sidebarGroupedResult: (grouped: [(folder: FolderInfo, conversations: [ConversationRecord])], ungrouped: [ConversationRecord]) {
+        groupConversationsByFolder(conversations: sidebarFiltered, folders: sidebarFolders)
+    }
+    private var sidebarGrouped: [(folder: FolderInfo, conversations: [ConversationRecord])] { sidebarGroupedResult.grouped }
+    private var sidebarUngrouped: [ConversationRecord] { sidebarGroupedResult.ungrouped }
+
+    // --- State properties ---
     @State private var showFileImporter = false
     @State private var showInvalidAlert = false
     @State private var showEmptyAlert = false
+    @State private var showClearDataAlert = false
     @State private var errorDetails: String = ""
     @State private var conversations: [ConversationRecord] = []
     @State private var isLoading: Bool = false
@@ -226,185 +247,56 @@ struct ContentView: SwiftUI.View {
     @State private var searchText: String = ""
     @State private var searchResults: [String: (content: String, score: Double)] = [:]
     @State private var selectedTag: String? = nil
-    // --- Restored sidebar/folder state ---
     @State private var expandedFolders: Set<String> = []
     @State private var selectedConversationId: String? = nil
     @State private var recentFolders: [String] = []
     @State private var recentTags: [String] = []
-    // Computed property for selected conversation
-    private var selectedConversation: ConversationRecord? {
-        conversations.first(where: { $0.id == selectedConversationId })
-    }
-    // --- End restored state ---
-    // ...existing methods and body...
-    // --- Restored sidebar/folder helpers ---
-    struct FolderInfo {
-        let id: String
-        let name: String
-        let conversationIds: [String]
-    }
-    func fetchAllFolders() -> [FolderInfo] {
-        SQLiteManager.shared.fetchFolders().map { (id, name, conversationIdsJson) in
-            let ids: [String]
-            if let data = conversationIdsJson.data(using: .utf8),
-               let arr = try? JSONSerialization.jsonObject(with: data) as? [String] {
-                ids = arr
-            } else {
-                ids = []
-            }
-            return FolderInfo(id: id, name: name, conversationIds: ids)
-        }
-    }
-    func groupConversationsByFolder(conversations: [ConversationRecord], folders: [FolderInfo]) -> ([(folder: FolderInfo, conversations: [ConversationRecord])], [ConversationRecord]) {
-        var folderMap: [String: [ConversationRecord]] = [:]
-        var ungrouped: [ConversationRecord] = []
-        for convo in conversations {
-            if let fid = convo.folderId, !fid.isEmpty {
-                folderMap[fid, default: []].append(convo)
-            } else {
-                ungrouped.append(convo)
-            }
-        }
-        let grouped = folders.map { folder in
-            (folder: folder, conversations: folderMap[folder.id] ?? [])
-        }
-        return (grouped, ungrouped)
-    }
-    private func updateRecentFolders(with folderId: String) {
-        recentFolders.removeAll { $0 == folderId }
-        recentFolders.insert(folderId, at: 0)
-        if recentFolders.count > 3 {
-            recentFolders = Array(recentFolders.prefix(3))
-        }
-        // TODO: Persist to SQLite if needed
-    }
-    private func updateRecentTags(with tag: String) {
-        recentTags.removeAll { $0 == tag }
-        recentTags.insert(tag, at: 0)
-        if recentTags.count > 3 {
-            recentTags = Array(recentTags.prefix(3))
-        }
-        // TODO: Persist to SQLite if needed
-    }
-    // --- End restored sidebar/folder helpers ---
-    // MARK: - Tagging helpers
-    func addTag(_ tag: String, to convo: ConversationRecord) {
-        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return }
-        if convo.tags.contains(trimmed) {
-            tagError = "Tag already exists."
-            newTagText = ""
-            return
-        }
-        SQLiteManager.shared.addTag(trimmed, to: convo.id)
-        self.reloadSelectedConversationTags()
-        newTagText = ""
-        tagFieldFocused = true
-    }
 
-    func removeTag(_ tag: String, from convo: ConversationRecord) {
-        SQLiteManager.shared.removeTag(tag, from: convo.id)
-        self.reloadSelectedConversationTags()
-    }
-
-    func reloadSelectedConversationTags() {
-        guard let convo = selectedConversation else { return }
-        let updatedTags = SQLiteManager.shared.fetchTags(for: convo.id)
-        if let idx = conversations.firstIndex(where: { $0.id == convo.id }) {
-            conversations[idx].tags = updatedTags
-        }
-    }
-
-    // MARK: - Search functionality
-    func performSearch() {
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[DEBUG] performSearch called. searchText=\(searchText), trimmed=\(trimmed)")
-        if trimmed.isEmpty {
-            print("[DEBUG] Search text is empty. Clearing searchResults.")
-            searchResults = [:]
-            return
-        }
-        var query = trimmed
-        if query.contains(" ") {
-            query = "\"" + query + "\""
-        }
-        print("[DEBUG] FTS query (no wildcards): \(query)")
-        let ftsResults = SQLiteManager.shared.searchMessagesFTS(query: query)
-        print("[DEBUG] FTS returned \(ftsResults.count) results.")
-        let ftsConversationIds = Set(ftsResults.map { $0.conversationId })
-        let titleConversationIds = Set(conversations.filter { $0.title.lowercased().contains(trimmed) }.map { $0.id })
-        _ = ftsConversationIds.union(titleConversationIds)
-        var resultsDict: [String: (content: String, score: Double)] = [:]
-        for result in ftsResults {
-            if resultsDict[result.conversationId] == nil {
-                resultsDict[result.conversationId] = (content: result.content, score: 1.0)
-            }
-        }
-        for id in titleConversationIds where resultsDict[id] == nil {
-            resultsDict[id] = (content: "", score: 1.0)
-        }
-        print("[DEBUG] searchResults keys: \(resultsDict.keys)")
-        searchResults = resultsDict
-    }
-
-    // MARK: - Filtered Conversations
-    func filteredConversations() -> [ConversationRecord] {
-        var filtered = conversations
-        if let tag = selectedTag, !tag.isEmpty {
-            filtered = filtered.filter { $0.tags.contains(tag) }
-        }
-        if !searchText.isEmpty && !searchResults.isEmpty {
-            filtered = filtered.filter { searchResults[$0.id] != nil }
-            print("[DEBUG] filteredConversations: searchText=\(searchText), tag=\(String(describing: selectedTag)), filtered count=\(filtered.count)")
-            return filtered
-        } else {
-            print("[DEBUG] filteredConversations: returning all conversations (count=\(filtered.count)), tag=\(String(describing: selectedTag))")
-            return filtered
-        }
-    }
-
-    // MARK: - Main View
+    // --- Main View ---
     var body: some SwiftUI.View {
-        let dbPath = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first!.appending("/conversations.sqlite3")
-        return VStack(spacing: 0) {
-            // Top bar: Open button, search bar, and tag UI
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("DB Path:")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    Text(dbPath)
-                        .font(.caption2)
-                        .foregroundColor(.blue)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Button("Open") {
+        VStack(spacing: 0) {
+            // Top bar
+            HStack(alignment: .center, spacing: 0) {
+                // Left: Open and Clear Data
+                HStack(spacing: 10) {
+                    Button(action: {
                         conversations = []
                         selectedConversationId = nil
                         showFileImporter = true
+                    }) {
+                        Label("Open", systemImage: "folder")
+                            .font(.body)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 14)
+                            .background(Color.accentColor.opacity(0.13))
+                            .cornerRadius(8)
                     }
-                    Button("Clear Data") {
-                        SQLiteManager.shared.clearAllData()
-                        conversations = []
-                        selectedConversationId = nil
-                        searchText = ""
-                        searchResults = [:]
+                    Button(action: {
+                        showClearDataAlert = true
+                    }) {
+                        Label("Clear Data", systemImage: "trash")
+                            .font(.body)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 14)
+                            .background(Color.red.opacity(0.13))
+                            .foregroundColor(.red)
+                            .cornerRadius(8)
                     }
-                    .foregroundColor(.red)
                 }
-                .padding(.vertical)
-                // Search bar
-                HStack(spacing: 4) {
+                .padding(.leading, 18)
+                Spacer()
+                // Center: Search bar
+                HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
                     TextField("Search conversations...", text: $searchText)
                         .textFieldStyle(.roundedBorder)
-                        .frame(minWidth: 180, maxWidth: 260)
+                        .frame(minWidth: 220, maxWidth: 340)
                         .onSubmit { self.performSearch() }
                     Button(action: { self.performSearch() }) {
                         Image(systemName: "arrow.right.circle.fill")
                             .foregroundColor(.accentColor)
+                            .font(.title3)
                     }
                     if !searchText.isEmpty {
                         Button(action: {
@@ -416,49 +308,44 @@ struct ContentView: SwiftUI.View {
                         }
                     }
                 }
-                // (Removed add tag and tag chips from top bar)
-                Spacer()
+                .padding(.vertical, 10)
+                .padding(.horizontal, 0)
+                .background(Color(NSColor.windowBackgroundColor))
+                .cornerRadius(10)
+                .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                .frame(maxWidth: 420)
             }
+            .frame(height: 56)
+            .background(Color(NSColor.windowBackgroundColor))
             Divider()
             // Main content: two-pane layout
             HStack(spacing: 0) {
                 // Sidebar: Only folders and their conversations
-                List {
-                    let folders = fetchAllFolders()
-                    let (grouped, ungrouped) = groupConversationsByFolder(conversations: filteredConversations(), folders: folders)
-                    // Folders as expandable/collapsible
-                    ForEach(grouped, id: \ .folder.id) { group in
-                        FolderHeader(folder: group.folder, isExpanded: expandedFolders.contains(group.folder.id)) {
-                            if expandedFolders.contains(group.folder.id) {
-                                expandedFolders.remove(group.folder.id)
-                            } else {
-                                expandedFolders.insert(group.folder.id)
-                                updateRecentFolders(with: group.folder.id)
+                VStack {
+                    // Debug prints for sidebar state (removed from ViewBuilder context)
+                    List {
+                        // Folders as expandable/collapsible
+                        if !sidebarGrouped.isEmpty {
+                            SidebarFolderGroupsView
+                        }
+                        // If there are ungrouped conversations and no folders, show them directly (no Section)
+                        if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
+                            SidebarUngroupedView
+                        }
+                        // If there are both folders and ungrouped, show ungrouped in a Section
+                        if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
+                            Section(header: Text("Ungrouped").font(.headline)) {
+                                SidebarUngroupedView
                             }
                         }
-                        if expandedFolders.contains(group.folder.id) {
-                            ForEach(group.conversations, id: \ .id) { convo in
-                                let isSelected = selectedConversationId == convo.id
-                                HStack {
-                                    Spacer().frame(width: 18)
-                                    ConversationRow(convo: convo, isSelected: isSelected) {
-                                        selectedConversationId = convo.id
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // Ungrouped conversations at the bottom
-                    if !ungrouped.isEmpty {
-                        Section(header: Text("Ungrouped").font(.headline)) {
-                            ForEach(ungrouped, id: \ .id) { convo in
-                                let isSelected = selectedConversationId == convo.id
-                                ConversationRow(convo: convo, isSelected: isSelected) {
-                                    selectedConversationId = convo.id
-                                }
-                            }
+                        // If there are no folders and no ungrouped, show a placeholder
+                        if sidebarGrouped.isEmpty && sidebarUngrouped.isEmpty {
+                            Text("No conversations found.")
+                                .foregroundColor(.secondary)
+                                .padding()
                         }
                     }
+
                 }
                 .frame(width: 250)
                 Divider()
@@ -495,19 +382,7 @@ struct ContentView: SwiftUI.View {
                                 Text("No conversation content available.")
                                     .foregroundColor(.secondary)
                             } else {
-                                ScrollViewReader { scrollProxy in
-                                    ScrollView {
-                                        VStack(alignment: .leading, spacing: 12) {
-                                            MessagesView(messages: messages, searchText: searchText)
-                                        }
-                                        .padding(.top, 8)
-                                        .onAppear {
-                                            withAnimation {
-                                                scrollProxy.scrollTo("firstMatch", anchor: .center)
-                                            }
-                                        }
-                                    }
-                                }
+                                CentralMessagesScrollView(messages: messages, searchText: searchText)
                             }
                         }
                     }
@@ -555,23 +430,9 @@ struct ContentView: SwiftUI.View {
                         .padding(.horizontal, 16)
                     GeometryReader { geo in
                         ScrollView {
-                            let columns = [GridItem(.adaptive(minimum: 90, maximum: 140), spacing: 10)]
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
-                                ForEach(allTags, id: \ .self) { tag in
-                                    Button(action: { selectedTag = tag }) {
-                                        Text(tag)
-                                            .font(.body)
-                                            .foregroundColor(selectedTag == tag ? .white : .primary)
-                                            .padding(.vertical, 6)
-                                            .padding(.horizontal, 12)
-                                            .background(selectedTag == tag ? Color.accentColor : Color.gray.opacity(0.13))
-                                            .cornerRadius(8)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
+                            TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
+                                selectedTag = tag
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
                         }
                         .frame(height: max(geo.size.height * 0.5, 120))
                     }
@@ -621,6 +482,7 @@ struct ContentView: SwiftUI.View {
                 .background(Color(NSColor.windowBackgroundColor))
             }
         }
+        // Attach all view modifiers to the main VStack
         .alert("Unable to parse file", isPresented: $showInvalidAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -629,6 +491,18 @@ struct ContentView: SwiftUI.View {
             } else {
                 Text(errorDetails)
             }
+        }
+        .alert("Clear All Data?", isPresented: $showClearDataAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete Everything", role: .destructive) {
+                SQLiteManager.shared.clearAllData()
+                conversations = []
+                selectedConversationId = nil
+                searchText = ""
+                searchResults = [:]
+            }
+        } message: {
+            Text("This will permanently delete your local database, all conversations, tags, and folders. This action cannot be undone. Are you sure you want to proceed?")
         }
         .onAppear {
             loadConversationsFromDB()
@@ -743,5 +617,173 @@ struct ContentView: SwiftUI.View {
             }
         }
     }
-    // Add any additional methods or computed properties here
+
+    // --- Helper methods and computed properties ---
+    // Fetch all folders from SQLiteManager
+    private func fetchAllFolders() -> [FolderInfo] {
+        let folderTuples = SQLiteManager.shared.fetchFolders()
+        return folderTuples.map { FolderInfo(id: $0.id, name: $0.name) }
+    }
+
+    // Group conversations by folder
+    private func groupConversationsByFolder(conversations: [ConversationRecord], folders: [FolderInfo]) -> (grouped: [(folder: FolderInfo, conversations: [ConversationRecord])], ungrouped: [ConversationRecord]) {
+        var folderMap: [String: [ConversationRecord]] = [:]
+        var ungrouped: [ConversationRecord] = []
+        for convo in conversations {
+            if let folderId = convo.folderId, let _ = folders.first(where: { $0.id == folderId }) {
+                folderMap[folderId, default: []].append(convo)
+            } else {
+                ungrouped.append(convo)
+            }
+        }
+        let grouped = folders.compactMap { folder -> (folder: FolderInfo, conversations: [ConversationRecord])? in
+            let convos = folderMap[folder.id] ?? []
+            return convos.isEmpty ? nil : (folder, convos)
+        }
+        return (grouped, ungrouped)
+    }
+
+    // Filtered conversations by search and tag
+    private func filteredConversations() -> [ConversationRecord] {
+        var filtered = conversations
+        print("[DEBUG] filteredConversations: initial count = \(filtered.count), selectedTag = \(String(describing: selectedTag)), searchText = \(searchText)")
+        if let tag = selectedTag, !tag.isEmpty {
+            filtered = filtered.filter { $0.tags.contains(tag) }
+            print("[DEBUG] filteredConversations: after tag filter count = \(filtered.count)")
+        }
+        if !searchText.isEmpty {
+            let lower = searchText.lowercased()
+            filtered = filtered.filter { $0.title.lowercased().contains(lower) || ($0.mapping?.lowercased().contains(lower) ?? false) }
+            print("[DEBUG] filteredConversations: after search filter count = \(filtered.count)")
+        }
+        return filtered
+    }
+
+    // Update recent folders (LRU, max 3)
+    private func updateRecentFolders(with folderId: String) {
+        if let idx = recentFolders.firstIndex(of: folderId) {
+            recentFolders.remove(at: idx)
+        }
+        recentFolders.insert(folderId, at: 0)
+        if recentFolders.count > 3 {
+            recentFolders = Array(recentFolders.prefix(3))
+        }
+    }
+
+    // Update recent tags (LRU, max 3)
+    private func updateRecentTags(with tag: String) {
+        if let idx = recentTags.firstIndex(of: tag) {
+            recentTags.remove(at: idx)
+        }
+        recentTags.insert(tag, at: 0)
+        if recentTags.count > 3 {
+            recentTags = Array(recentTags.prefix(3))
+        }
+    }
+
+    // Selected conversation (computed property)
+    private var selectedConversation: ConversationRecord? {
+        conversations.first(where: { $0.id == selectedConversationId })
+    }
+
+    // Perform search (simple title/content search)
+    private func performSearch() {
+        // This can be replaced with FTS for more advanced search
+        // For now, just triggers filteredConversations recompute
+    }
+    // --- Helper methods and computed properties ---
+    @ViewBuilder
+    private func ConversationRow(convo: ConversationRecord, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
+        // Minimal version for diagnosis
+        Text(convo.title)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+            .cornerRadius(8)
+            .onTapGesture { onSelect() }
+    }
+
+    @ViewBuilder
+    private func FolderHeader(folder: FolderInfo, isExpanded: Bool, onToggle: @escaping () -> Void) -> some SwiftUI.View {
+        // ...existing code...
+    }
+
+    @ViewBuilder
+    private func TagChip(tag: String, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
+        // ...existing code...
+    }
+
+    // Helper view for rendering chat messages
+    @ViewBuilder
+    private func MessagesView(messages: [ChatMessage], searchText: String) -> some SwiftUI.View {
+        MessagesForEachView(messages: messages, searchText: searchText)
+    }
+
+    // Helper view for ForEach over messages
+    @ViewBuilder
+    private func MessagesForEachView(messages: [ChatMessage], searchText: String) -> some SwiftUI.View {
+        let lowerSearch = searchText.lowercased()
+        let matchIndices = !lowerSearch.isEmpty ? messages.enumerated().compactMap { idx, msg in msg.content.lowercased().contains(lowerSearch) ? idx : nil } : []
+        ForEach(Array(messages.enumerated()), id: \ .offset) { pair in
+            let idx = pair.offset
+            let msg = pair.element
+            let isMatch = !lowerSearch.isEmpty && msg.content.lowercased().contains(lowerSearch)
+            let isFirstMatch = isMatch && matchIndices.first == idx
+            HStack {
+                if msg.author == "user" {
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.blue.opacity(0.2))
+                        highlightText(msg.content, search: lowerSearch)
+                            .padding(10)
+                    }
+                    .frame(maxWidth: 350, alignment: .leading)
+                    .id(isFirstMatch ? "firstMatch" : nil)
+                    Spacer()
+                } else {
+                    Spacer()
+                    ZStack(alignment: .trailing) {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.green.opacity(0.2))
+                        highlightText(msg.content, search: lowerSearch)
+                            .padding(10)
+                    }
+                    .frame(maxWidth: 1000, alignment: .trailing)
+                    .id(isFirstMatch ? "firstMatch" : nil)
+                }
+            }
+        }
+    }
+
+    // Helper: Fetch all unique tags from all conversations
+    private var allTags: [String] {
+        let tags = conversations.flatMap { $0.tags }
+        return Array(Set(tags)).sorted()
+    }
+    // MARK: - Load Conversations
+    func loadConversationsFromDB() {
+        self.conversations = SQLiteManager.shared.fetchAllConversations()
+        print("[DEBUG] loadConversationsFromDB: loaded \(conversations.count) conversations")
+        for convo in conversations {
+            print("[DEBUG] convo: id=\(convo.id), title=\(convo.title), folderId=\(String(describing: convo.folderId)), tags=\(convo.tags)")
+        }
+        if let first = conversations.first {
+            selectedConversationId = first.id
+        }
+    }
+
+
+    // MARK: - Main View
+    // ...existing code for the main body property and its implementation...
+}
+
+// Helper: Print sidebar state for debugging (file-scope function)
+fileprivate func debugPrintSidebarState(sidebarGrouped: [FolderInfo], sidebarUngrouped: [ConversationRecord]) {
+    print("[DEBUG] Sidebar List: grouped count = \(sidebarGrouped.count), ungrouped count = \(sidebarUngrouped.count)")
+    if !sidebarUngrouped.isEmpty {
+        print("[DEBUG] Sidebar List: rendering ungrouped section with \(sidebarUngrouped.count) conversations")
+    }
+    if sidebarGrouped.isEmpty && sidebarUngrouped.isEmpty {
+        print("[DEBUG] Sidebar List: no conversations found")
+    }
 }
