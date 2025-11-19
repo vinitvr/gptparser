@@ -1,5 +1,6 @@
 import SwiftUI
 import SQLite
+import MarkdownUI
 
 // FolderInfo struct for folder grouping
 struct FolderInfo: Identifiable, Hashable {
@@ -100,19 +101,56 @@ func highlightText(_ text: String, search: String) -> Text {
 // Extract messages from mapping
 func extractMessages(mapping: [String: AnyCodable]?) -> [ChatMessage] {
     guard let mapping = mapping else { return [] }
-    var messages: [ChatMessage] = []
+    // Build a map of id -> node
+    var nodeMap: [String: [String: Any]] = [:]
     for (key, value) in mapping {
-        if let node = value.value as? [String: Any],
-           let message = node["message"] as? [String: Any],
+        if let node = value.value as? [String: Any] {
+            nodeMap[key] = node
+        }
+    }
+    // Print all mapping keys for debug
+    print("[extractMessages] Mapping keys: \(Array(nodeMap.keys))")
+    // Find all root node candidates (parent == nil, NSNull, or missing)
+    let rootIds = nodeMap.compactMap { (key, node) -> String? in
+        let parentRaw = node["parent"]
+        if parentRaw == nil { return key }
+        if parentRaw is NSNull { return key }
+        if let ac = parentRaw as? AnyCodable, ac.value is NSNull { return key }
+        if let str = parentRaw as? String, str.isEmpty { return key }
+        return nil
+    }
+    print("[extractMessages] Root node candidates: \(rootIds)")
+    guard rootIds.count == 1, let rootId = rootIds.first else {
+        print("[extractMessages] Error: Expected exactly one root node, found \(rootIds.count)")
+        print("[extractMessages] Node keys and parent values:")
+        for (key, node) in nodeMap {
+            if let parent = node["parent"] {
+                print("  id: \(key), parent: \(parent)")
+            } else {
+                print("  id: \(key), parent: <missing>")
+            }
+        }
+        return []
+    }
+    var orderedMessages: [ChatMessage] = []
+    var currentId: String? = rootId
+    while let cid = currentId, let node = nodeMap[cid] {
+        if let message = node["message"] as? [String: Any],
            let author = message["author"] as? [String: Any],
            let role = author["role"] as? String,
            let content = message["content"] as? [String: Any],
            let parts = content["parts"] as? [Any],
            let text = parts.first as? String {
-            messages.append(ChatMessage(id: key, author: role, content: text))
+            orderedMessages.append(ChatMessage(id: cid, author: role, content: text))
+        }
+        // Follow only the first child
+        if let children = node["children"] as? [String], let nextId = children.first {
+            currentId = nextId
+        } else {
+            currentId = nil
         }
     }
-    return messages.sorted { $0.id < $1.id }
+    return orderedMessages
 }
 
 struct ContentView: SwiftUI.View {
@@ -768,7 +806,7 @@ struct ContentView: SwiftUI.View {
             HStack(alignment: .top) {
                 if msg.author == "user" {
                     VStack(alignment: .leading, spacing: 4) {
-                        highlightText(msg.content, search: lowerSearch)
+                        Markdown(msg.content)
                     }
                     .padding(.vertical, 10)
                     .padding(.horizontal, 16)
@@ -784,7 +822,7 @@ struct ContentView: SwiftUI.View {
                 } else {
                     Spacer()
                     VStack(alignment: .leading, spacing: 4) {
-                        highlightText(msg.content, search: lowerSearch)
+                        Markdown(msg.content)
                     }
                     .padding(.vertical, 10)
                     .padding(.horizontal, 16)
