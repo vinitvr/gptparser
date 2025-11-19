@@ -448,47 +448,50 @@ struct ContentView: SwiftUI.View {
                             .font(.headline)
                             .padding(.horizontal, 16)
                         GeometryReader { geo in
-                            ScrollView {
-                                TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
-                                    selectedTag = tag
-                                }
-                            }
-                            .frame(height: max(geo.size.height * 0.5, 120))
-                        }
-                        // Add Tag Field (horizontal, production look)
-                        HStack(spacing: 8) {
-                            TextField("Add tag", text: $newTagText)
-                                .font(.body)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 14)
-                                .background(Color.gray.opacity(0.13))
-                                .cornerRadius(8)
-                                .focused($tagFieldFocused)
-                                .onSubmit {
-                                    if let convo = selectedConversation {
-                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                        updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                            VStack(spacing: 0) {
+                                ScrollView {
+                                    VStack(spacing: 0) {
+                                        TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
+                                            selectedTag = tag
+                                        }
+                                        HStack(spacing: 8) {
+                                            TextField("Add tag", text: $newTagText)
+                                                .font(.body)
+                                                .padding(.vertical, 10)
+                                                .padding(.horizontal, 14)
+                                                .background(Color.gray.opacity(0.13))
+                                                .cornerRadius(8)
+                                                .focused($tagFieldFocused)
+                                                .onSubmit {
+                                                    if let convo = selectedConversation {
+                                                        self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                                        updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                                    }
+                                                }
+                                            Button(action: {
+                                                if let convo = selectedConversation {
+                                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                                    updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                                }
+                                            }) {
+                                                Text("Add")
+                                                    .font(.body)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.white)
+                                                    .padding(.vertical, 10)
+                                                    .padding(.horizontal, 20)
+                                                    .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
+                                                    .cornerRadius(8)
+                                            }
+                                            .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
+                                        }
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 8)
                                     }
                                 }
-                            Button(action: {
-                                if let convo = selectedConversation {
-                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                    updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
-                                }
-                            }) {
-                                Text("Add")
-                                    .font(.body)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.white)
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal, 20)
-                                    .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
-                                    .cornerRadius(8)
+                                .frame(maxHeight: geo.size.height * 0.5)
                             }
-                            .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
                         if let tagError = tagError {
                             Text(tagError)
                                 .font(.caption)
