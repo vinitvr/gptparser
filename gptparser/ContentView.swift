@@ -272,6 +272,7 @@ struct ContentView: SwiftUI.View {
 
     // --- State properties ---
     @State private var showFileImporter = false
+    @State private var showOpenFileWarning = false
     @State private var showInvalidAlert = false
     @State private var showEmptyAlert = false
     @State private var showClearDataAlert = false
@@ -298,9 +299,11 @@ struct ContentView: SwiftUI.View {
                 // Left: Open and Clear Data
                 HStack(spacing: 10) {
                     Button(action: {
-                        conversations = []
-                        selectedConversationId = nil
-                        showFileImporter = true
+                        if conversations.isEmpty {
+                            showFileImporter = true
+                        } else {
+                            showOpenFileWarning = true
+                        }
                     }) {
                         Label("Open", systemImage: "folder")
                             .font(.body)
@@ -309,6 +312,32 @@ struct ContentView: SwiftUI.View {
                             .background(Color.accentColor.opacity(0.13))
                             .cornerRadius(8)
                     }
+            // Warning alert for opening a new file
+            .alert(isPresented: $showOpenFileWarning) {
+                Alert(
+                    title: Text("Open New File?"),
+                    message: Text("Opening a new file will overwrite the current database. All existing conversations, tags, and folders will be lost. You will need to recreate your tags and folder structure. Continue?"),
+                    primaryButton: .destructive(Text("Open")) {
+                        showFileImporter = true
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+        // Handle file import and validation
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url):
+                do {
+                    // ...existing code...
+                } catch {
+                    errorDetails = "Failed to read or parse file: \(error.localizedDescription)"
+                    showInvalidAlert = true
+                }
+            case .failure(let error):
+                errorDetails = "File import failed: \(error.localizedDescription)"
+                showInvalidAlert = true
+            }
+        }
                     Button(action: {
                         showClearDataAlert = true
                     }) {
@@ -581,6 +610,9 @@ struct ContentView: SwiftUI.View {
                     showEmptyAlert = true
                     return
                 }
+                // Always clear the database before import
+                print("[DEBUG] fileImporter: calling clearAllData() before import...")
+                SQLiteManager.shared.clearAllData()
                 let didAccess = url.startAccessingSecurityScopedResource()
                 defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
                 do {

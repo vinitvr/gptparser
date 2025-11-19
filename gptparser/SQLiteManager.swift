@@ -24,11 +24,17 @@ extension SQLiteManager {
     // Clear all folders and conversations (for testing)
     func clearAllData() {
         do {
+            let dbPath = (db as? Connection)?.description ?? "<unknown>"
+            let countBefore = try db.scalar(conversations.count)
+            print("[DEBUG] clearAllData: DB path = \(dbPath)")
+            print("[DEBUG] clearAllData: conversations before delete = \(countBefore)")
             try db.run(conversations.delete())
             try db.run(folders.delete())
             try db.run(conversationTags.delete())
             // Optionally clear FTS table
             try db.execute("DELETE FROM messages_fts;")
+            let countAfter = try db.scalar(conversations.count)
+            print("[DEBUG] clearAllData: conversations after delete = \(countAfter)")
         } catch {
             print("SQLite clearAllData error: \(error)")
         }

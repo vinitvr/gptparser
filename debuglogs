@@ -1,0 +1,281 @@
+[DEBUG] filteredConversations: initial count = 10, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 10, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 10, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 10, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 10, selectedTag = nil, searchText = 
+[extractMessages] Mapping keys: ["0fc6c7fd-5484-49bb-be13-e28e7cb59761", "2e63138e-8afd-44ac-b2ab-5e5e86b7cf3c", "7158d0ba-d790-443f-8cf3-5ae1dee3850b", "a549c2ca-fdfe-4705-90db-c265555dd130", "24e40b1e-425c-485b-a818-1b957e12d04f", "8b90f676-efdb-493e-a601-65b46a7a50cb", "2af3a4d8-46e2-4f4f-b5c7-8c4e7c442be9", "69ff0536-9fd3-4792-ab36-92a75880c32d", "349b6f22-9ef9-45e4-acdf-5f2e24000387", "14180821-376e-499a-9892-6400f66eb742", "51243a3e-45b2-427f-891b-27b7114f8b5b", "89dec553-e867-441b-901d-0d1e55e9e569", "698864d6-475e-468f-bc9f-153b6fe8fbb1", "7d946578-51df-4345-9613-afa916a2496e", "6c72de36-ff88-4d93-aa39-86b8e455e548", "f8fd7e4d-1077-4502-ae9f-985d02bcb8ff", "8368d1aa-26d7-4fc4-816a-32597fe5da8e", "ab37b9a5-4f9e-40e6-aef8-204b462246f6", "fa4fcaee-5abe-49ac-88e3-38b1cb4b3ce6", "c9dca758-cc97-42a0-a9ff-8c8108c5d04f"]
+[extractMessages] Root node candidates: ["89dec553-e867-441b-901d-0d1e55e9e569"]
+[DEBUG] fileImporter: .success, urls=[file:///Users/vineethvr/Downloads/rich_conversations.json]
+[DEBUG] fileImporter: data read, size=18373
+[DEBUG] fileImporter: JSON parsed, type=__NSSingleEntryDictionaryI
+[DEBUG] JSON root is object, conversations count: 5
+[DEBUG] conversationsArray count: 5
+[DEBUG] conversationsArray[0]: ["update_time": 1763364102.502695, "create_time": 1763363742.502695, "mapping": {
+    "401b12ab-34c4-4e07-9edd-efadfadc1b3a" =     {
+        children =         (
+            "6d664c85-4843-498a-a10d-86a54a5f0478"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "Yes \U2014 give me the 1-page printable checklist."
+                );
+            };
+            "create_time" = "1763364042.502695";
+            id = "401b12ab-34c4-4e07-9edd-efadfadc1b3a";
+        };
+        parent = "ff6b452b-8bc3-4a7d-b1b8-d85edd889487";
+    };
+    "6d664c85-4843-498a-a10d-86a54a5f0478" =     {
+        children =         (
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "**Printable Checklist \U2014 Universal Chat Organizer**\n\n1. Import export ZIP\n2. Verify counts (conversations/messages)\n3. Create primary tags: `Project Alpha`, `Client Work`, `Personal`\n4. Enable chosen sync option\n5. Run 'Auto-tag (Pro)' on imported data\n\n**Icons legend**\n- \U2705 Done\n- \U23f3 Pending\n- \U26a0\Ufe0f Attention required\n\nIf you'd like, I can format this as Markdown or PDF."
+                );
+            };
+            "create_time" = "1763364102.502695";
+            id = "6d664c85-4843-498a-a10d-86a54a5f0478";
+        };
+        parent = "401b12ab-34c4-4e07-9edd-efadfadc1b3a";
+    };
+    "aeacd3ae-5c36-4ed8-9193-8e54c57b0b2b" =     {
+        children =         (
+            "ff6b452b-8bc3-4a7d-b1b8-d85edd889487"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "Hi, give me a quick onboarding checklist for the app."
+                );
+            };
+            "create_time" = "1763363742.502695";
+            id = "aeacd3ae-5c36-4ed8-9193-8e54c57b0b2b";
+        };
+        parent = "<null>";
+    };
+    "ff6b452b-8bc3-4a7d-b1b8-d85edd889487" =     {
+        children =         (
+            "401b12ab-34c4-4e07-9edd-efadfadc1b3a"
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "# Welcome to Universal Chat Organizer \Ud83c\Udf89\n\n**Quick Start \U2014 5 steps**\n\n1. **Import** your ChatGPT/Gemini/Claude export (Settings \U2192 Import).  \n2. **Scan** the dashboard for `Recent` conversations.  \n3. **Create** tags or a *Custom View* for projects.  \n4. **Enable** iCloud sync (Lite) or Encrypted Sync (Pro).  \n5. **Upgrade** to Pro to unlock semantic search and auto-summaries.\n\n> Tip: Press `Cmd/Ctrl+K` to jump to search instantly.\n\n**Checklist**\n- [x] Import data\n- [ ] Create first tag (`Project Alpha`)\n- [ ] Try semantic search (Pro)\n\n**Code snippet (example):**\n```bash\n# Export from ChatGPT\nopenai export --output conversations.zip\n# Import into app\nuniversal-chat-organizer import conversations.zip\n```\n\n**Resources**\n| Resource | Purpose |\n|---|---:|\n| Docs | Setup & Troubleshooting |\n| FAQ | Common importer issues |\n\nLet me know if you want a condensed printable checklist (1-page)."
+                );
+            };
+            "create_time" = "1763363802.502695";
+            id = "ff6b452b-8bc3-4a7d-b1b8-d85edd889487";
+        };
+        parent = "aeacd3ae-5c36-4ed8-9193-8e54c57b0b2b";
+    };
+}, "title": Onboarding checklist — ChatGPT convo 1, "id": chatcmpl-adda9973-2a9b-49ab-b188-029c12cede70]
+[DEBUG] conversationsArray[1]: ["title": Semantic search API — ChatGPT convo 2, "id": chatcmpl-0636297b-4b40-4698-b6b9-3dcfac203183, "update_time": 1763365302.502695, "create_time": 1763364942.502695, "mapping": {
+    "7b79a10e-0ca5-4ee3-a7e3-74507647d25b" =     {
+        children =         (
+            "fb20dada-cbcf-4d8b-ba72-112ba8461295"
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "## Semantic Search API \U2014 Quick Example \Ud83d\Udd0e\n\n**Request (HTTP)**\n\n```http\nPOST /v1/semantic/search\nAuthorization: Bearer <API_KEY>\nContent-Type: application/json\n\n{\n  \"query\": \"invoice reconciliation process\",\n  \"top_k\": 10\n}\n```\n\n**Response structure**\n1. `id` \U2014 result id\n2. `score` \U2014 similarity score (0\U20131)\n3. `snippet` \U2014 highlighted excerpt\n\n**Best practices**\n- \U2705 Pre-compute embeddings at import time.\n- \U26a0\Ufe0f Recompute embeddings after major edits.\n- \Ud83d\Udccc Cache top-100 results for hot queries.\n\n**Example (Node.js):**\n```js\nconst res = await fetch(\"https://api.example.com/v1/semantic/search\", {\n  method: \"POST\",\n  headers: { \"Authorization\": \"Bearer \" + key, \"Content-Type\": \"application/json\" },\n  body: JSON.stringify({ query: \"invoice reconciliation\", top_k: 5 })\n});\nconst body = await res.json();\nconsole.log(body.results);\n```\n\nNeed a Python example or a C# snippet?"
+                );
+            };
+            "create_time" = "1763365002.502695";
+            id = "7b79a10e-0ca5-4ee3-a7e3-74507647d25b";
+        };
+        parent = "cfb6a013-7b62-4733-84ce-343d4dc78a0c";
+    };
+    "cfb6a013-7b62-4733-84ce-343d4dc78a0c" =     {
+        children =         (
+            "7b79a10e-0ca5-4ee3-a7e3-74507647d25b"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "Show me how to call the semantic search API, with examples."
+                );
+            };
+            "create_time" = "1763364942.502695";
+            id = "cfb6a013-7b62-4733-84ce-343d4dc78a0c";
+        };
+        parent = "<null>";
+    };
+    "e1a0bcd7-f9d0-4fcd-afcd-5b10aec1dd23" =     {
+        children =         (
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "**C# Example (HttpClient)**\n\n```csharp\nusing var client = new HttpClient();\nclient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(\"Bearer\", apiKey);\nvar payload = new { query = \"invoice reconciliation\", top_k = 5 };\nvar resp = await client.PostAsJsonAsync(\"https://api.example.com/v1/semantic/search\", payload);\nresp.EnsureSuccessStatusCode();\nvar json = await resp.Content.ReadFromJsonAsync<object>();\n```\n\n**Error Handling**\n- Retry on 5xx with exponential backoff.\n- Fail fast on 4xx (invalid API key / malformed request).\n- Log latency and error codes (use structured logging).\n\n> NOTE: Use circuit-breaker patterns for high-throughput calls. \Ud83d\Udca1"
+                );
+            };
+            "create_time" = "1763365302.502695";
+            id = "e1a0bcd7-f9d0-4fcd-afcd-5b10aec1dd23";
+        };
+        parent = "fb20dada-cbcf-4d8b-ba72-112ba8461295";
+    };
+    "fb20dada-cbcf-4d8b-ba72-112ba8461295" =     {
+        children =         (
+            "e1a0bcd7-f9d0-4fcd-afcd-5b10aec1dd23"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "C# snippet please, and suggest error handling."
+                );
+            };
+            "create_time" = "1763365242.502695";
+            id = "fb20dada-cbcf-4d8b-ba72-112ba8461295";
+        };
+        parent = "7b79a10e-0ca5-4ee3-a7e3-74507647d25b";
+    };
+}]
+[DEBUG] conversationsArray[2]: ["id": chatcmpl-5fcf187f-a251-4423-b731-e58100cd0ad3, "mapping": {
+    "10776596-d754-457a-a4f5-a92546969dbe" =     {
+        children =         (
+            "e653ff24-a2dc-4171-b3dc-a91a9bc326d6"
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "# Design Decision: SQLite + FTS5 vs Vector DB\n\n**Summary:** Use _both_ \U2014 SQLite FTS5 for keyword speed, Vector DB for semantic matching.\n\n**Comparison**\n\n| Aspect | SQLite + FTS5 | Vector DB |\n|---|---:|---:|\n| Latency | Low for keyword | Low for vectors with optimized index |\n| Cost | Minimal | Higher (managed services) |\n| Privacy | Fully local | Typically managed (unless self-hosted) |\n| Complexity | Simple | Higher (indexing, sharding) |\n\n**Recommendation**\n1. Start with SQLite + FTS5 (MVP).\n2. Add vector index as an optional Pro feature.\n3. Keep embedding cache as first-class artifact.\n\n**Checklist**\n- [x] Implement SQLite metadata store\n- [ ] Integrate embedding generator\n- [ ] Add fallback: keyword \U2192 semantic re-rank\n\n**Quick pros**\n- SQLite: \U2705 cheap, offline-first\n- Vector DB: \U2705 semantic relevance for abstracts\n"
+                );
+            };
+            "create_time" = "1763366202.502695";
+            id = "10776596-d754-457a-a4f5-a92546969dbe";
+        };
+        parent = "1c9e06d1-6b34-4b75-9486-29e0fef05b01";
+    };
+    "1c9e06d1-6b34-4b75-9486-29e0fef05b01" =     {
+        children =         (
+            "10776596-d754-457a-a4f5-a92546969dbe"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "Help decide between SQLite + FTS5 vs a vector DB for search."
+                );
+            };
+            "create_time" = "1763366142.502695";
+            id = "1c9e06d1-6b34-4b75-9486-29e0fef05b01";
+        };
+        parent = "<null>";
+    };
+    "639b355f-f9dc-46ea-9700-d6629a61555c" =     {
+        children =         (
+        );
+        message =         {
+            author =             {
+                role = assistant;
+            };
+            content =             {
+                parts =                 (
+                    "For 100k convos:\n- Use sharded vector index (FAISS or Milvus).\n- Use partitioned SQLite or move to a proper RDBMS for metadata.\n- Implement async ingestion pipelines.\n\n**Operational tips**\n- Monitor index build time.\n- Run incremental embedding jobs during off-peak hours.\n- Provide user with \"rebuild embeddings\" action in UI.\n\nIf you want, I can sketch the migration plan with milestones."
+                );
+            };
+            "create_time" = "1763366502.502695";
+            id = "639b355f-f9dc-46ea-9700-d6629a61555c";
+        };
+        parent = "e653ff24-a2dc-4171-b3dc-a91a9bc326d6";
+    };
+    "e653ff24-a2dc-4171-b3dc-a91a9bc326d6" =     {
+        children =         (
+            "639b355f-f9dc-46ea-9700-d6629a61555c"
+        );
+        message =         {
+            author =             {
+                role = user;
+            };
+            content =             {
+                parts =                 (
+                    "What about scale to 100k conversations?"
+                );
+            };
+            "create_time" = "1763366442.502695";
+            id = "e653ff24-a2dc-4171-b3dc-a91a9bc326d6";
+        };
+        parent = "10776596-d754-457a-a4f5-a92546969dbe";
+    };
+}, "title": Search architecture — ChatGPT convo 3, "update_time": 1763366502.502695, "create_time": 1763366142.502695]
+[DEBUG] upsertConversation: id=chatcmpl-adda9973-2a9b-49ab-b188-029c12cede70, title=Onboarding checklist — ChatGPT convo 1, folderId=nil, tags=[]
+[DEBUG] upsertConversation: success for id=chatcmpl-adda9973-2a9b-49ab-b188-029c12cede70
+[DEBUG] upsertConversation: id=chatcmpl-0636297b-4b40-4698-b6b9-3dcfac203183, title=Semantic search API — ChatGPT convo 2, folderId=nil, tags=[]
+[DEBUG] upsertConversation: success for id=chatcmpl-0636297b-4b40-4698-b6b9-3dcfac203183
+[DEBUG] upsertConversation: id=chatcmpl-5fcf187f-a251-4423-b731-e58100cd0ad3, title=Search architecture — ChatGPT convo 3, folderId=nil, tags=[]
+[DEBUG] upsertConversation: success for id=chatcmpl-5fcf187f-a251-4423-b731-e58100cd0ad3
+[DEBUG] upsertConversation: id=chatcmpl-3acbba92-ee64-4391-b7a9-bd2a9b61d397, title=Import crash debugging — ChatGPT convo 4, folderId=nil, tags=[]
+[DEBUG] upsertConversation: success for id=chatcmpl-3acbba92-ee64-4391-b7a9-bd2a9b61d397
+[DEBUG] upsertConversation: id=chatcmpl-e507c88f-2414-4fb6-ad06-3ab2ff58def7, title=Meeting notes — ChatGPT convo 5, folderId=nil, tags=[]
+[DEBUG] upsertConversation: success for id=chatcmpl-e507c88f-2414-4fb6-ad06-3ab2ff58def7
+[DEBUG] fileImporter: calling loadConversationsFromDB() after import
+[DEBUG] fetchAllConversations: id=chatcmpl-940320ae-5f3c-447c-bf3e-173b8cd3eadd, title=Rich Conversation 1, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-3ac3523e-a072-4c2b-a8e0-d809e417786b, title=Rich Conversation 2, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-fd565e8d-f8e8-4695-b148-64f3d47b3111, title=Rich Conversation 3, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-e4826dcc-663d-40b3-bf39-f6e4a33a06cd, title=Rich Conversation 4, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-ba514e2a-2d8f-4330-bfd3-5dd1864ef8f2, title=Rich Conversation 5, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-acc15bb2-7a50-4f3f-8359-53b6d9835312, title=Rich Conversation 6, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-3a8c130e-2f9a-4e7a-a9e6-cad2e432e116, title=Rich Conversation 7, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-8675660f-55fd-4a18-bd75-0a8bb5515059, title=Rich Conversation 8, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-dd15b158-b4c1-4b08-b1d5-9475dd407816, title=Rich Conversation 9, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-d43bc512-4949-4771-be42-ac3a350c9f60, title=Rich Conversation 10, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-adda9973-2a9b-49ab-b188-029c12cede70, title=Onboarding checklist — ChatGPT convo 1, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-0636297b-4b40-4698-b6b9-3dcfac203183, title=Semantic search API — ChatGPT convo 2, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-5fcf187f-a251-4423-b731-e58100cd0ad3, title=Search architecture — ChatGPT convo 3, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-3acbba92-ee64-4391-b7a9-bd2a9b61d397, title=Import crash debugging — ChatGPT convo 4, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: id=chatcmpl-e507c88f-2414-4fb6-ad06-3ab2ff58def7, title=Meeting notes — ChatGPT convo 5, folderId=nil, tags=[]
+[DEBUG] fetchAllConversations: returning 15 conversations
+[DEBUG] loadConversationsFromDB: loaded 15 conversations
+[DEBUG] convo: id=chatcmpl-940320ae-5f3c-447c-bf3e-173b8cd3eadd, title=Rich Conversation 1, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-3ac3523e-a072-4c2b-a8e0-d809e417786b, title=Rich Conversation 2, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-fd565e8d-f8e8-4695-b148-64f3d47b3111, title=Rich Conversation 3, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-e4826dcc-663d-40b3-bf39-f6e4a33a06cd, title=Rich Conversation 4, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-ba514e2a-2d8f-4330-bfd3-5dd1864ef8f2, title=Rich Conversation 5, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-acc15bb2-7a50-4f3f-8359-53b6d9835312, title=Rich Conversation 6, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-3a8c130e-2f9a-4e7a-a9e6-cad2e432e116, title=Rich Conversation 7, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-8675660f-55fd-4a18-bd75-0a8bb5515059, title=Rich Conversation 8, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-dd15b158-b4c1-4b08-b1d5-9475dd407816, title=Rich Conversation 9, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-d43bc512-4949-4771-be42-ac3a350c9f60, title=Rich Conversation 10, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-adda9973-2a9b-49ab-b188-029c12cede70, title=Onboarding checklist — ChatGPT convo 1, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-0636297b-4b40-4698-b6b9-3dcfac203183, title=Semantic search API — ChatGPT convo 2, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-5fcf187f-a251-4423-b731-e58100cd0ad3, title=Search architecture — ChatGPT convo 3, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-3acbba92-ee64-4391-b7a9-bd2a9b61d397, title=Import crash debugging — ChatGPT convo 4, folderId=nil, tags=[]
+[DEBUG] convo: id=chatcmpl-e507c88f-2414-4fb6-ad06-3ab2ff58def7, title=Meeting notes — ChatGPT convo 5, folderId=nil, tags=[]
+[DEBUG] filteredConversations: initial count = 15, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 15, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 15, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 15, selectedTag = nil, searchText = 
+[DEBUG] filteredConversations: initial count = 15, selectedTag = nil, searchText = 
+[extractMessages] Mapping keys: ["c9dca758-cc97-42a0-a9ff-8c8108c5d04f", "89dec553-e867-441b-901d-0d1e55e9e569", "349b6f22-9ef9-45e4-acdf-5f2e24000387", "14180821-376e-499a-9892-6400f66eb742", "69ff0536-9fd3-4792-ab36-92a75880c32d", "0fc6c7fd-5484-49bb-be13-e28e7cb59761", "8368d1aa-26d7-4fc4-816a-32597fe5da8e", "7d946578-51df-4345-9613-afa916a2496e", "2af3a4d8-46e2-4f4f-b5c7-8c4e7c442be9", "a549c2ca-fdfe-4705-90db-c265555dd130", "6c72de36-ff88-4d93-aa39-86b8e455e548", "2e63138e-8afd-44ac-b2ab-5e5e86b7cf3c", "f8fd7e4d-1077-4502-ae9f-985d02bcb8ff", "698864d6-475e-468f-bc9f-153b6fe8fbb1", "8b90f676-efdb-493e-a601-65b46a7a50cb", "51243a3e-45b2-427f-891b-27b7114f8b5b", "ab37b9a5-4f9e-40e6-aef8-204b462246f6", "24e40b1e-425c-485b-a818-1b957e12d04f", "7158d0ba-d790-443f-8cf3-5ae1dee3850b", "fa4fcaee-5abe-49ac-88e3-38b1cb4b3ce6"]
+[extractMessages] Root node candidates: ["89dec553-e867-441b-901d-0d1e55e9e569"]
