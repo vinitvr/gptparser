@@ -305,7 +305,7 @@ struct ContentView: SwiftUI.View {
                             showOpenFileWarning = true
                         }
                     }) {
-                        Label("Open", systemImage: "folder")
+                        Label("Import Conversations", systemImage: "folder")
                             .font(.body)
                             .padding(.vertical, 6)
                             .padding(.horizontal, 14)
@@ -393,7 +393,11 @@ struct ContentView: SwiftUI.View {
             HStack(spacing: 0) {
                 // Sidebar: Only folders and their conversations
                 if !conversations.isEmpty {
-                    VStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Imported Conversations")
+                            .font(.headline)
+                            .padding(.leading, 16)
+                            .padding(.top, 8)
                         List {
                             // Folders as expandable/collapsible
                             if !sidebarGrouped.isEmpty {
@@ -449,8 +453,6 @@ struct ContentView: SwiftUI.View {
                         Text(convo.title)
                             .font(.title2)
                             .padding(.bottom, 4)
-                        Text("ID: \(convo.id)")
-                            .font(.caption)
                         if let created = convo.createTime {
                             Text("Created: \(created)")
                                 .font(.caption)
