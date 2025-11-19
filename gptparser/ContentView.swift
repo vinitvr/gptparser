@@ -762,33 +762,45 @@ struct ContentView: SwiftUI.View {
         let lowerSearch = searchText.lowercased()
         let matchIndices = !lowerSearch.isEmpty ? messages.enumerated().compactMap { idx, msg in msg.content.lowercased().contains(lowerSearch) ? idx : nil } : []
         ForEach(Array(messages.enumerated()), id: \ .offset) { pair in
-            let idx = pair.offset
-            let msg = pair.element
+            let (idx, msg) = pair
             let isMatch = !lowerSearch.isEmpty && msg.content.lowercased().contains(lowerSearch)
             let isFirstMatch = isMatch && matchIndices.first == idx
-            HStack {
+            HStack(alignment: .top) {
                 if msg.author == "user" {
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.blue.opacity(0.2))
+                    VStack(alignment: .leading, spacing: 4) {
                         highlightText(msg.content, search: lowerSearch)
-                            .padding(10)
                     }
-                    .frame(maxWidth: 350, alignment: .leading)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(Color.gray.opacity(0.13))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.25), lineWidth: 0.5)
+                    )
+                    .frame(maxWidth: 500, alignment: .leading)
                     .id(isFirstMatch ? "firstMatch" : nil)
                     Spacer()
                 } else {
                     Spacer()
-                    ZStack(alignment: .trailing) {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isMatch ? Color.yellow.opacity(0.6) : Color.green.opacity(0.2))
+                    VStack(alignment: .leading, spacing: 4) {
                         highlightText(msg.content, search: lowerSearch)
-                            .padding(10)
                     }
-                    .frame(maxWidth: 1000, alignment: .trailing)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.25), lineWidth: 0.5)
+                    )
+                    .shadow(color: Color.gray.opacity(0.15), radius: 2, x: 0, y: 1)
+                    .frame(maxWidth: 700, alignment: .trailing)
                     .id(isFirstMatch ? "firstMatch" : nil)
                 }
             }
+            .padding(.vertical, 2)
+            .padding(.horizontal, 4)
         }
     }
 
