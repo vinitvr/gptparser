@@ -694,13 +694,27 @@ struct ContentView: SwiftUI.View {
     // --- Helper methods and computed properties ---
     @ViewBuilder
     private func ConversationRow(convo: ConversationRecord, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
-        // Minimal version for diagnosis
-        Text(convo.title)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 12)
-            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-            .cornerRadius(8)
-            .onTapGesture { onSelect() }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(convo.title)
+                .font(.body)
+            if !convo.tags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(convo.tags, id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.gray.opacity(0.18))
+                            .cornerRadius(6)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+        .cornerRadius(8)
+        .onTapGesture { onSelect() }
     }
 
     @ViewBuilder
