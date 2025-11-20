@@ -37,7 +37,6 @@ struct AnyCodable: Codable, CustomStringConvertible {
             value = ""
         }
     }
-
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         if let intValue = value as? Int {
@@ -59,7 +58,6 @@ struct AnyCodable: Codable, CustomStringConvertible {
             throw EncodingError.invalidValue(value, context)
         }
     }
-
     var description: String {
         if let dict = value as? [String: Any] {
             return prettyPrint(dict)
@@ -69,7 +67,6 @@ struct AnyCodable: Codable, CustomStringConvertible {
             return String(describing: value)
         }
     }
-
     private func prettyPrint(_ dict: [String: Any]) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
               let str = String(data: data, encoding: .utf8) else {
@@ -154,6 +151,28 @@ func extractMessages(mapping: [String: AnyCodable]?) -> [ChatMessage] {
 }
 
 struct ContentView: SwiftUI.View {
+    // --- State properties ---
+    @State private var showLoadingModal = false
+    @State private var showFileImporter = false
+    @State private var showOpenFileWarning = false
+    @State private var showInvalidAlert = false
+    @State private var showEmptyAlert = false
+    @State private var showClearDataAlert = false
+    @State private var errorDetails: String = ""
+    @State private var conversations: [ConversationRecord] = []
+    @State private var isLoading: Bool = false
+    @State private var fileLoaded: Bool = false
+    @State private var newTagText: String = ""
+    @FocusState private var tagFieldFocused: Bool
+    @State private var tagError: String?
+    @State private var searchText: String = ""
+    @State private var searchResults: [String: (content: String, score: Double)] = [:]
+    @State private var selectedTag: String? = nil
+    @State private var expandedFolders: Set<String> = []
+    @State private var selectedConversationId: String? = nil
+    @State private var recentFolders: [String] = []
+    @State private var recentTags: [String] = []
+
     // Add a tag to a conversation and update UI
     private func addTag(_ tag: String, to convo: ConversationRecord) {
         let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -270,308 +289,321 @@ struct ContentView: SwiftUI.View {
     private var sidebarGrouped: [(folder: FolderInfo, conversations: [ConversationRecord])] { sidebarGroupedResult.grouped }
     private var sidebarUngrouped: [ConversationRecord] { sidebarGroupedResult.ungrouped }
 
-    // --- State properties ---
-    @State private var showFileImporter = false
-    @State private var showOpenFileWarning = false
-    @State private var showInvalidAlert = false
-    @State private var showEmptyAlert = false
-    @State private var showClearDataAlert = false
-    @State private var errorDetails: String = ""
-    @State private var conversations: [ConversationRecord] = []
-    @State private var isLoading: Bool = false
-    @State private var fileLoaded: Bool = false
-    @State private var newTagText: String = ""
-    @FocusState private var tagFieldFocused: Bool
-    @State private var tagError: String?
-    @State private var searchText: String = ""
-    @State private var searchResults: [String: (content: String, score: Double)] = [:]
-    @State private var selectedTag: String? = nil
-    @State private var expandedFolders: Set<String> = []
-    @State private var selectedConversationId: String? = nil
-    @State private var recentFolders: [String] = []
-    @State private var recentTags: [String] = []
-
     // --- Main View ---
     var body: some SwiftUI.View {
-        VStack(spacing: 0) {
-            // Top bar
-            HStack(alignment: .center, spacing: 0) {
-                // Left: Open and Clear Data
-                HStack(spacing: 10) {
-                    Button(action: {
-                        if conversations.isEmpty {
-                            showFileImporter = true
-                        } else {
-                            showOpenFileWarning = true
+        ZStack {
+            VStack(spacing: 0) {
+                // Top bar
+                HStack(alignment: .center, spacing: 0) {
+                    // Left: Open and Clear Data
+                    HStack(spacing: 10) {
+                        Button(action: {
+                            print("[DEBUG] Import button tapped, starting fileImporter flow")
+                            if conversations.isEmpty {
+                                showFileImporter = true
+                            } else {
+                                showOpenFileWarning = true
+                            }
+                        }) {
+                            Label("Import Conversations", systemImage: "folder")
+                                .font(.body)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 14)
+                                .background(Color.accentColor.opacity(0.13))
+                                .cornerRadius(8)
                         }
-                    }) {
-                        Label("Import Conversations", systemImage: "folder")
-                            .font(.body)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 14)
-                            .background(Color.accentColor.opacity(0.13))
-                            .cornerRadius(8)
+                // Warning alert for opening a new file
+                .alert(isPresented: $showOpenFileWarning) {
+                    Alert(
+                        title: Text("Open New File?"),
+                        message: Text("Opening a new file will overwrite the current database. All existing conversations, tags, and folders will be lost. You will need to recreate your tags and folder structure. Continue?"),
+                        primaryButton: .destructive(Text("Open")) {
+                            showFileImporter = true
+                        },
+                        secondaryButton: .cancel()
+                    )
+                }
+            // Handle file import and validation
+                .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.json]) { result in
+                    print("[DEBUG] fileImporter handler entered, result = \(result)")
+                switch result {
+                case .success(let url):
+                    print("[DEBUG] fileImporter: Success, about to set showLoadingModal = true")
+                    showLoadingModal = true
+                    print("[DEBUG] fileImporter: showLoadingModal is now \(showLoadingModal)")
+                    DispatchQueue.main.async {
+                        print("[DEBUG] fileImporter: Entered main.async, modal should now be visible")
+                        print("[DEBUG] fileImporter: showLoadingModal (inside main.async) is \(showLoadingModal)")
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            print("[DEBUG] fileImporter: Background import started")
+                            do {
+                                // ...your import logic here...
+                                // Simulate work (remove this in production):
+                                // sleep(2)
+                                // ...end import logic...
+                                DispatchQueue.main.async {
+                                    print("[DEBUG] fileImporter: Import finished, setting showLoadingModal = false")
+                                    showLoadingModal = false
+                                    // ...any other UI updates...
+                                }
+                            } catch {
+                                DispatchQueue.main.async {
+                                    print("[DEBUG] fileImporter: Import failed, setting showLoadingModal = false")
+                                    errorDetails = "Failed to read or parse file: \(error.localizedDescription)"
+                                    showInvalidAlert = true
+                                    showLoadingModal = false
+                                }
+                            }
+                        }
                     }
-            // Warning alert for opening a new file
-            .alert(isPresented: $showOpenFileWarning) {
-                Alert(
-                    title: Text("Open New File?"),
-                    message: Text("Opening a new file will overwrite the current database. All existing conversations, tags, and folders will be lost. You will need to recreate your tags and folder structure. Continue?"),
-                    primaryButton: .destructive(Text("Open")) {
-                        showFileImporter = true
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-        // Handle file import and validation
-        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url):
-                do {
-                    // ...existing code...
-                } catch {
-                    errorDetails = "Failed to read or parse file: \(error.localizedDescription)"
+                case .failure(let error):
+                    print("[DEBUG] fileImporter: Failure, error = \(error.localizedDescription)")
+                    errorDetails = "File import failed: \(error.localizedDescription)"
                     showInvalidAlert = true
                 }
-            case .failure(let error):
-                errorDetails = "File import failed: \(error.localizedDescription)"
-                showInvalidAlert = true
             }
-        }
-                    Button(action: {
-                        showClearDataAlert = true
-                    }) {
-                        Label("Clear Data", systemImage: "trash")
-                            .font(.body)
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 14)
-                            .background(Color.red.opacity(0.13))
-                            .foregroundColor(.red)
-                            .cornerRadius(8)
-                    }
-                    .disabled(conversations.isEmpty)
-                }
-                .padding(.leading, 18)
-                Spacer()
-                // Center: Search bar
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    TextField("Search conversations...", text: $searchText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(minWidth: 220, maxWidth: 340)
-                        .onSubmit { self.performSearch() }
-                        .disabled(conversations.isEmpty)
-                    Button(action: { self.performSearch() }) {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .foregroundColor(.accentColor)
-                            .font(.title3)
-                    }
-                    .disabled(conversations.isEmpty)
-                    if !searchText.isEmpty {
                         Button(action: {
-                            searchText = ""
-                            searchResults = [:]
+                            showClearDataAlert = true
                         }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
+                            Label("Clear Data", systemImage: "trash")
+                                .font(.body)
+                                .padding(.vertical, 6)
+                                .padding(.horizontal, 14)
+                                .background(Color.red.opacity(0.13))
+                                .foregroundColor(.red)
+                                .cornerRadius(8)
                         }
                         .disabled(conversations.isEmpty)
                     }
+                    .padding(.leading, 18)
+                    Spacer()
+                    // Center: Search bar
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        TextField("Search conversations...", text: $searchText)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 220, maxWidth: 340)
+                            .onSubmit { self.performSearch() }
+                            .disabled(conversations.isEmpty)
+                        Button(action: { self.performSearch() }) {
+                            Image(systemName: "arrow.right.circle.fill")
+                                .foregroundColor(.accentColor)
+                                .font(.title3)
+                        }
+                        .disabled(conversations.isEmpty)
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                searchResults = [:]
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                            .disabled(conversations.isEmpty)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 0)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    .cornerRadius(10)
+                    .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                    .frame(maxWidth: 420)
                 }
-                .padding(.vertical, 10)
-                .padding(.horizontal, 0)
+                .frame(height: 56)
                 .background(Color(NSColor.windowBackgroundColor))
-                .cornerRadius(10)
-                .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
-                .frame(maxWidth: 420)
-            }
-            .frame(height: 56)
-            .background(Color(NSColor.windowBackgroundColor))
-            Divider()
-            // Main content: two-pane layout
-            HStack(spacing: 0) {
-                // Sidebar: Only folders and their conversations
-                if !conversations.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Imported Conversations")
-                            .font(.headline)
-                            .padding(.leading, 16)
-                            .padding(.top, 8)
-                        List {
-                            // Folders as expandable/collapsible
-                            if !sidebarGrouped.isEmpty {
-                                SidebarFolderGroupsView
-                            }
-                            // If there are ungrouped conversations and no folders, show them directly (no Section)
-                            if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                                SidebarUngroupedView
-                            }
-                            // If there are both folders and ungrouped, show ungrouped in a Section
-                            if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                                Section(header: Text("Ungrouped").font(.headline)) {
+                Divider()
+                // Main content: two-pane layout
+                HStack(spacing: 0) {
+                    // Sidebar: Only folders and their conversations
+                    if !conversations.isEmpty {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("Imported Conversations")
+                                .font(.headline)
+                                .padding(.leading, 16)
+                                .padding(.top, 8)
+                            List {
+                                // Folders as expandable/collapsible
+                                if !sidebarGrouped.isEmpty {
+                                    SidebarFolderGroupsView
+                                }
+                                // If there are ungrouped conversations and no folders, show them directly (no Section)
+                                if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
                                     SidebarUngroupedView
                                 }
+                                // If there are both folders and ungrouped, show ungrouped in a Section
+                                if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
+                                    Section(header: Text("Ungrouped").font(.headline)) {
+                                        SidebarUngroupedView
+                                    }
+                                }
                             }
                         }
+                        .frame(width: 250)
                     }
-                    .frame(width: 250)
-                }
-                // Central pane
-                VStack(alignment: .center) {
-                    if isLoading {
-                        Spacer()
-                        HStack {
+                    // Central pane
+                    VStack(alignment: .center) {
+                        if isLoading {
                             Spacer()
-                            ProgressView("Loading conversations...Please wait")
-                                .progressViewStyle(CircularProgressViewStyle())
+                            HStack {
+                                Spacer()
+                                ProgressView("Loading conversations...Please wait")
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                Spacer()
+                            }
                             Spacer()
-                        }
-                        Spacer()
-                    } else if conversations.isEmpty {
-                        Spacer()
-                        VStack(spacing: 18) {
-                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                .resizable()
-                                .frame(width: 54, height: 54)
-                                .foregroundColor(.accentColor.opacity(0.25))
-                            Text("No conversations loaded.")
+                        } else if conversations.isEmpty {
+                            Spacer()
+                            VStack(spacing: 18) {
+                                Image(systemName: "bubble.left.and.bubble.right.fill")
+                                    .resizable()
+                                    .frame(width: 54, height: 54)
+                                    .foregroundColor(.accentColor.opacity(0.25))
+                                Text("No conversations loaded.")
+                                    .font(.title2)
+                                    .foregroundColor(.secondary)
+                                Text("Click 'Open' to import your ChatGPT conversation JSON file.")
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                                Divider().padding(.vertical, 8)
+                                Text("Tip: You can export your conversations from ChatGPT or Gemini and import them here. For more help, see the documentation or FAQ.")
+                                    .font(.footnote)
+                                    .foregroundColor(.gray)
+                            }
+                            .frame(maxWidth: 400)
+                            .multilineTextAlignment(.center)
+                            Spacer()
+                        } else if let convo = selectedConversation {
+                            Text(convo.title)
                                 .font(.title2)
-                                .foregroundColor(.secondary)
-                            Text("Click 'Open' to import your ChatGPT conversation JSON file.")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            Divider().padding(.vertical, 8)
-                            Text("Tip: You can export your conversations from ChatGPT or Gemini and import them here. For more help, see the documentation or FAQ.")
-                                .font(.footnote)
-                                .foregroundColor(.gray)
-                        }
-                        .frame(maxWidth: 400)
-                        .multilineTextAlignment(.center)
-                        Spacer()
-                    } else if let convo = selectedConversation {
-                        Text(convo.title)
-                            .font(.title2)
-                            .padding(.bottom, 4)
-                        if let created = convo.createTime {
-                            Text("Created: \(created)")
-                                .font(.caption)
-                        }
-                        if let updated = convo.updateTime {
-                            Text("Updated: \(updated)")
-                                .font(.caption)
-                        }
-                        Divider()
-                        if let mappingStr = convo.mapping, let mappingData = mappingStr.data(using: .utf8) {
-                            let mapping = try? JSONDecoder().decode([String: AnyCodable].self, from: mappingData)
-                            let messages = extractMessages(mapping: mapping)
-                            if messages.isEmpty {
-                                Text("No conversation content available.")
-                                    .foregroundColor(.secondary)
-                            } else {
-                                CentralMessagesScrollView(messages: messages, searchText: searchText)
+                                .padding(.bottom, 4)
+                            if let created = convo.createTime {
+                                Text("Created: \(created)")
+                                    .font(.caption)
+                            }
+                            if let updated = convo.updateTime {
+                                Text("Updated: \(updated)")
+                                    .font(.caption)
+                            }
+                            Divider()
+                            if let mappingStr = convo.mapping, let mappingData = mappingStr.data(using: .utf8) {
+                                let mapping = try? JSONDecoder().decode([String: AnyCodable].self, from: mappingData)
+                                let messages = extractMessages(mapping: mapping)
+                                if messages.isEmpty {
+                                    Text("No conversation content available.")
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    CentralMessagesScrollView(messages: messages, searchText: searchText)
+                                }
                             }
                         }
                     }
-                }
-                Divider()
-                // Right tag panel: Recently used tags, all tags, and add tag
-                if !conversations.isEmpty {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Tag Filters (show only the selected tag as chip)
-                        Text("Tag Filters")
-                            .font(.headline)
-                            .padding(.top, 16)
-                            .padding(.horizontal, 16)
-                        HStack(spacing: 10) {
-                            if let tag = selectedTag, !tag.isEmpty {
-                                TagChip(tag: tag, isSelected: true) {
-                                    selectedTag = nil
+                    Divider()
+                    // Right tag panel: Recently used tags, all tags, and add tag
+                    if !conversations.isEmpty {
+                        VStack(alignment: .leading, spacing: 20) {
+                            // Tag Filters (show only the selected tag as chip)
+                            Text("Tag Filters")
+                                .font(.headline)
+                                .padding(.top, 16)
+                                .padding(.horizontal, 16)
+                            HStack(spacing: 10) {
+                                if let tag = selectedTag, !tag.isEmpty {
+                                    TagChip(tag: tag, isSelected: true) {
+                                        selectedTag = nil
+                                    }
+                                } else {
+                                    Text("(None)")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
                                 }
-                            } else {
-                                Text("(None)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
                             }
-                        }
-                        .padding(.horizontal, 16)
-                        // Clear Tag Filter Button
-                        if selectedTag != nil {
-                            Button(action: { selectedTag = nil }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
-                                    Text("Clear Tag Filter")
-                                        .font(.body)
+                            .padding(.horizontal, 16)
+                            // Clear Tag Filter Button
+                            if selectedTag != nil {
+                                Button(action: { selectedTag = nil }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                        Text("Clear Tag Filter")
+                                            .font(.body)
+                                    }
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 12)
+                                    .background(Color.gray.opacity(0.13))
+                                    .cornerRadius(8)
                                 }
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 12)
-                                .background(Color.gray.opacity(0.13))
-                                .cornerRadius(8)
+                                .buttonStyle(.plain)
+                                .padding(.horizontal, 16)
                             }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 16)
-                        }
-                        // All Tags
-                        Text("All Tags")
-                            .font(.headline)
-                            .padding(.horizontal, 16)
-                        GeometryReader { geo in
-                            VStack(spacing: 0) {
-                                ScrollView {
-                                    VStack(spacing: 0) {
-                                        TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
-                                            selectedTag = tag
-                                        }
-                                        HStack(spacing: 8) {
-                                            TextField("Add tag", text: $newTagText)
-                                                .font(.body)
-                                                .padding(.vertical, 10)
-                                                .padding(.horizontal, 14)
-                                                .background(Color.gray.opacity(0.13))
-                                                .cornerRadius(8)
-                                                .focused($tagFieldFocused)
-                                                .onSubmit {
+                            // All Tags
+                            Text("All Tags")
+                                .font(.headline)
+                                .padding(.horizontal, 16)
+                            GeometryReader { geo in
+                                VStack(spacing: 0) {
+                                    ScrollView {
+                                        VStack(spacing: 0) {
+                                            TagGridView(selectedTag: selectedTag, allTags: allTags) { tag in
+                                                selectedTag = tag
+                                            }
+                                            HStack(spacing: 8) {
+                                                TextField("Add tag", text: $newTagText)
+                                                    .font(.body)
+                                                    .padding(.vertical, 10)
+                                                    .padding(.horizontal, 14)
+                                                    .background(Color.gray.opacity(0.13))
+                                                    .cornerRadius(8)
+                                                    .focused($tagFieldFocused)
+                                                    .onSubmit {
+                                                        if let convo = selectedConversation {
+                                                            self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
+                                                            updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
+                                                        }
+                                                    }
+                                                Button(action: {
                                                     if let convo = selectedConversation {
                                                         self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
                                                         updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
                                                     }
+                                                }) {
+                                                    Text("Add")
+                                                        .font(.body)
+                                                        .fontWeight(.medium)
+                                                        .foregroundColor(.white)
+                                                        .padding(.vertical, 10)
+                                                        .padding(.horizontal, 20)
+                                                        .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
+                                                        .cornerRadius(8)
                                                 }
-                                            Button(action: {
-                                                if let convo = selectedConversation {
-                                                    self.addTag(newTagText.trimmingCharacters(in: .whitespacesAndNewlines), to: convo)
-                                                    updateRecentTags(with: newTagText.trimmingCharacters(in: .whitespacesAndNewlines))
-                                                }
-                                            }) {
-                                                Text("Add")
-                                                    .font(.body)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.white)
-                                                    .padding(.vertical, 10)
-                                                    .padding(.horizontal, 20)
-                                                    .background(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil ? Color.gray : Color.accentColor)
-                                                    .cornerRadius(8)
+                                                .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
                                             }
-                                            .disabled(newTagText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || selectedConversation == nil)
+                                            .padding(.horizontal, 16)
+                                            .padding(.top, 8)
                                         }
-                                        .padding(.horizontal, 16)
-                                        .padding(.top, 8)
                                     }
+                                    .frame(maxHeight: geo.size.height * 0.5)
                                 }
-                                .frame(maxHeight: geo.size.height * 0.5)
                             }
+                            if let tagError = tagError {
+                                Text(tagError)
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 16)
+                            }
+                            Spacer()
                         }
-                        if let tagError = tagError {
-                            Text(tagError)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .padding(.horizontal, 16)
-                        }
-                        Spacer()
+                        .frame(width: 260)
+                        .background(Color(NSColor.windowBackgroundColor))
                     }
-                    .frame(width: 260)
-                    .background(Color(NSColor.windowBackgroundColor))
                 }
+            }
+            // Modal overlay (always at the root ZStack level)
+            if showLoadingModal {
+                LoadingModalView(
+                    onCancel: { showLoadingModal = false },
+                    onSkip: { showLoadingModal = false }
+                )
             }
         }
         // Attach all view modifiers to the main VStack
@@ -604,110 +636,134 @@ struct ContentView: SwiftUI.View {
             allowedContentTypes: [.json],
             allowsMultipleSelection: false
         ) { result in
+            print("[DEBUG] fileImporter (root handler) entered, result = \(result)")
             switch result {
             case .success(let urls):
-                print("[DEBUG] fileImporter: .success, urls=\(urls)")
-                guard let url = urls.first else {
-                    print("[DEBUG] fileImporter: no url selected")
-                    showEmptyAlert = true
-                    return
-                }
-                // Always clear the database before import
-                print("[DEBUG] fileImporter: calling clearAllData() before import...")
-                SQLiteManager.shared.clearAllData()
-                let didAccess = url.startAccessingSecurityScopedResource()
-                defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let data = try Data(contentsOf: url)
-                    print("[DEBUG] fileImporter: data read, size=\(data.count)")
-                    guard !data.isEmpty else {
-                        print("[DEBUG] fileImporter: data is empty")
-                        showEmptyAlert = true
-                        return
-                    }
-                    let json = try JSONSerialization.jsonObject(with: data)
-                    print("[DEBUG] fileImporter: JSON parsed, type=\(type(of: json))")
-                    // Support both {conversations: [...]} and plain array root
-                    var conversationsArray: [[String: Any]] = []
-                    var foldersArray: [[String: Any]]? = nil
-                    if let rootDict = json as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]], !arr.isEmpty {
-                        conversationsArray = arr
-                        foldersArray = rootDict["folders"] as? [[String: Any]]
-                        print("[DEBUG] JSON root is object, conversations count: \(conversationsArray.count)")
-                    } else if let arr = json as? [[String: Any]], !arr.isEmpty,
-                              arr.first? ["id"] != nil, arr.first? ["title"] != nil {
-                        conversationsArray = arr
-                        print("[DEBUG] JSON root is array, conversations count: \(conversationsArray.count)")
-                    } else {
-                        print("[DEBUG] JSON root is invalid or missing required keys: \(type(of: json))")
-                        errorDetails = "The selected file is not a valid ChatGPT conversation export."
-                        showInvalidAlert = true
-                        return
-                    }
-                    // Insert folders if present
-                    if let foldersArray = foldersArray {
-                        for folder in foldersArray {
-                            guard let folderId = folder["id"] as? String,
-                                  let folderName = folder["name"] as? String else { continue }
-                            let conversationIds: [String]
-                            if let ids = folder["conversation_ids"] as? [String] {
-                                conversationIds = ids
-                            } else if let ids = folder["conversation_ids"] as? [Any] {
-                                conversationIds = ids.compactMap { $0 as? String }
+                print("[DEBUG] fileImporter (root): Success, about to set showLoadingModal = true")
+                showLoadingModal = true
+                print("[DEBUG] fileImporter (root): showLoadingModal is now \(showLoadingModal)")
+                DispatchQueue.main.async {
+                    print("[DEBUG] fileImporter (root): Entered main.async, modal should now be visible")
+                    print("[DEBUG] fileImporter (root): showLoadingModal (inside main.async) is \(showLoadingModal)")
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        print("[DEBUG] fileImporter (root): Background import started")
+                        guard let url = urls.first else {
+                            print("[DEBUG] fileImporter (root): no url selected")
+                            DispatchQueue.main.async {
+                                showLoadingModal = false
+                                showEmptyAlert = true
+                            }
+                            return
+                        }
+                        // Always clear the database before import
+                        print("[DEBUG] fileImporter (root): calling clearAllData() before import...")
+                        SQLiteManager.shared.clearAllData()
+                        let didAccess = url.startAccessingSecurityScopedResource()
+                        defer { if didAccess { url.stopAccessingSecurityScopedResource() } }
+                        do {
+                            let data = try Data(contentsOf: url)
+                            print("[DEBUG] fileImporter (root): data read, size=\(data.count)")
+                            guard !data.isEmpty else {
+                                print("[DEBUG] fileImporter (root): data is empty")
+                                DispatchQueue.main.async {
+                                    showLoadingModal = false
+                                    showEmptyAlert = true
+                                }
+                                return
+                            }
+                            let json = try JSONSerialization.jsonObject(with: data)
+                            print("[DEBUG] fileImporter (root): JSON parsed, type=\(type(of: json))")
+                            // Support both {conversations: [...]} and plain array root
+                            var conversationsArray: [[String: Any]] = []
+                            var foldersArray: [[String: Any]]? = nil
+                            if let rootDict = json as? [String: Any], let arr = rootDict["conversations"] as? [[String: Any]], !arr.isEmpty {
+                                conversationsArray = arr
+                                foldersArray = rootDict["folders"] as? [[String: Any]]
+                                print("[DEBUG] fileImporter (root): JSON root is object, conversations count: \(conversationsArray.count)")
+                            } else if let arr = json as? [[String: Any]], !arr.isEmpty,
+                                      arr.first? ["id"] != nil, arr.first? ["title"] != nil {
+                                conversationsArray = arr
+                                print("[DEBUG] fileImporter (root): JSON root is array, conversations count: \(conversationsArray.count)")
                             } else {
-                                conversationIds = []
+                                print("[DEBUG] fileImporter (root): JSON root is invalid or missing required keys: \(type(of: json))")
+                                DispatchQueue.main.async {
+                                    showLoadingModal = false
+                                    errorDetails = "The selected file is not a valid ChatGPT conversation export."
+                                    showInvalidAlert = true
+                                }
+                                return
                             }
-                            SQLiteManager.shared.upsertFolder(id: folderId, name: folderName, conversationIds: conversationIds)
+                            // Insert folders if present
+                            if let foldersArray = foldersArray {
+                                for folder in foldersArray {
+                                    guard let folderId = folder["id"] as? String,
+                                          let folderName = folder["name"] as? String else { continue }
+                                    let conversationIds: [String]
+                                    if let ids = folder["conversation_ids"] as? [String] {
+                                        conversationIds = ids
+                                    } else if let ids = folder["conversation_ids"] as? [Any] {
+                                        conversationIds = ids.compactMap { $0 as? String }
+                                    } else {
+                                        conversationIds = []
+                                    }
+                                    SQLiteManager.shared.upsertFolder(id: folderId, name: folderName, conversationIds: conversationIds)
+                                }
+                            }
+                            // Debug: print conversationsArray count and sample
+                            print("[DEBUG] fileImporter (root): conversationsArray count: \(conversationsArray.count)")
+                            for (i, dict) in conversationsArray.prefix(3).enumerated() {
+                                print("[DEBUG] fileImporter (root): conversationsArray[\(i)]: \(dict)")
+                            }
+                            // Insert conversations
+                            for dict in conversationsArray {
+                                guard let id = dict["id"] as? String,
+                                      let title = dict["title"] as? String else { continue }
+                                let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
+                                let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
+                                let folderId = dict["folder_id"] as? String
+                                let convo = ConversationRecord(
+                                    id: id,
+                                    title: title,
+                                    createTime: dict["create_time"] as? String,
+                                    updateTime: dict["update_time"] as? String,
+                                    mapping: mappingStr,
+                                    tags: [],
+                                    folderId: folderId
+                                )
+                                SQLiteManager.shared.upsertConversation(convo)
+                                // Insert messages into FTS table
+                                if let mapping = dict["mapping"] as? [String: Any] {
+                                    for (msgId, nodeAny) in mapping {
+                                        guard let node = nodeAny as? [String: Any],
+                                              let message = node["message"] as? [String: Any],
+                                              let authorDict = message["author"] as? [String: Any],
+                                              let role = authorDict["role"] as? String,
+                                              let contentDict = message["content"] as? [String: Any],
+                                              let parts = contentDict["parts"] as? [Any],
+                                              let text = parts.first as? String else { continue }
+                                        SQLiteManager.shared.insertMessageFTS(messageId: msgId, conversationId: id, author: role, content: text)
+                                    }
+                                }
+                            }
+                            // Reload from DB
+                            print("[DEBUG] fileImporter (root): calling loadConversationsFromDB() after import")
+                            DispatchQueue.main.async {
+                                loadConversationsFromDB()
+                                showLoadingModal = false
+                            }
+                        } catch {
+                            print("[DEBUG] fileImporter (root): error: \(error)")
+                            DispatchQueue.main.async {
+                                errorDetails = error.localizedDescription
+                                showLoadingModal = false
+                                showInvalidAlert = true
+                            }
                         }
                     }
-                    // Debug: print conversationsArray count and sample
-                    print("[DEBUG] conversationsArray count: \(conversationsArray.count)")
-                    for (i, dict) in conversationsArray.prefix(3).enumerated() {
-                        print("[DEBUG] conversationsArray[\(i)]: \(dict)")
-                    }
-                    // Insert conversations
-                    for dict in conversationsArray {
-                        guard let id = dict["id"] as? String,
-                              let title = dict["title"] as? String else { continue }
-                        let mappingData = try? JSONSerialization.data(withJSONObject: dict["mapping"] ?? [:])
-                        let mappingStr = mappingData.flatMap { String(data: $0, encoding: .utf8) }
-                        let folderId = dict["folder_id"] as? String
-                        let convo = ConversationRecord(
-                            id: id,
-                            title: title,
-                            createTime: dict["create_time"] as? String,
-                            updateTime: dict["update_time"] as? String,
-                            mapping: mappingStr,
-                            tags: [],
-                            folderId: folderId
-                        )
-                        SQLiteManager.shared.upsertConversation(convo)
-                        // Insert messages into FTS table
-                        if let mapping = dict["mapping"] as? [String: Any] {
-                            for (msgId, nodeAny) in mapping {
-                                guard let node = nodeAny as? [String: Any],
-                                      let message = node["message"] as? [String: Any],
-                                      let authorDict = message["author"] as? [String: Any],
-                                      let role = authorDict["role"] as? String,
-                                      let contentDict = message["content"] as? [String: Any],
-                                      let parts = contentDict["parts"] as? [Any],
-                                      let text = parts.first as? String else { continue }
-                                SQLiteManager.shared.insertMessageFTS(messageId: msgId, conversationId: id, author: role, content: text)
-                            }
-                        }
-                    }
-                    // Reload from DB
-                    print("[DEBUG] fileImporter: calling loadConversationsFromDB() after import")
-                    loadConversationsFromDB()
-                    isLoading = false
-                } catch {
-                    print("[DEBUG] fileImporter: error: \(error)")
-                    errorDetails = error.localizedDescription
-                    isLoading = false
-                    showInvalidAlert = true
                 }
             case .failure(let err):
-                print("[DEBUG] fileImporter: .failure, error=\(err)")
+                print("[DEBUG] fileImporter (root): .failure, error=\(err)")
+                errorDetails = err.localizedDescription
                 showInvalidAlert = true
             }
         }
@@ -897,7 +953,6 @@ struct ContentView: SwiftUI.View {
     // MARK: - Main View
     // ...existing code for the main body property and its implementation...
 }
-
 // Helper: Print sidebar state for debugging (file-scope function)
 fileprivate func debugPrintSidebarState(sidebarGrouped: [FolderInfo], sidebarUngrouped: [ConversationRecord]) {
     print("[DEBUG] Sidebar List: grouped count = \(sidebarGrouped.count), ungrouped count = \(sidebarUngrouped.count)")
