@@ -4,7 +4,7 @@
 import Foundation
 import SQLite
 
-struct ConversationRecord: Identifiable, Equatable, Hashable {
+struct ConversationRecord: Identifiable, Equatable, Hashable, Codable {
     let id: String
     let title: String
     let createTime: String?
