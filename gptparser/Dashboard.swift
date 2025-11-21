@@ -5,6 +5,7 @@ import MarkdownUI
 // FileManagerHelper and FileImportModalView are in FileManager.swift
 
 struct Dashboard: View {
+    @FocusState private var tagFieldFocused: Bool
     @StateObject private var fileManagerHelper = FileManagerHelper()
     // Minimal state for now; will expand as we wire up more logic
     // MARK: - Parameters (incrementally add more as needed)
@@ -120,83 +121,35 @@ struct Dashboard: View {
                 .frame(height: 56)
                 .background(Color(NSColor.windowBackgroundColor))
                 Divider()
-                // Main content: two-pane layout
+                // Main content: three-pane layout, but hide sidebar and tag pane if no conversations
                 HStack(spacing: 0) {
-                    // Sidebar: Folders and conversations (unchanged)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Imported Conversations")
-                            .font(.headline)
-                            .padding(.leading, 16)
-                            .padding(.top, 8)
-                        List {
-                            // Folders as expandable/collapsible
-                            if !sidebarGrouped.isEmpty {
-                                ForEach(sidebarGrouped, id: \ .folder.id) { group in
-                                    VStack(alignment: .leading, spacing: 0) {
-                                        HStack {
-                                            Button(action: { onToggleFolder(group.folder.id) }) {
-                                                Image(systemName: expandedFolders.contains(group.folder.id) ? "chevron.down" : "chevron.right")
-                                                    .foregroundColor(.accentColor)
-                                            }
-                                            Text(group.folder.name)
-                                                .font(.subheadline)
-                                                .fontWeight(.medium)
-                                        }
-                                        .padding(.vertical, 4)
-                                        .padding(.leading, 4)
-                                        if expandedFolders.contains(group.folder.id) {
-                                            ForEach(group.conversations, id: \ .id) { convo in
-                                                let isSelected = selectedConversationId == convo.id
-                                                HStack {
-                                                    Spacer().frame(width: 18)
-                                                    Text(convo.title)
-                                                        .font(.body)
-                                                        .foregroundColor(isSelected ? .accentColor : .primary)
-                                                        .onTapGesture { onSelectConversation(convo.id) }
-                                                }
-                                                .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-                                                .cornerRadius(8)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // If there are ungrouped conversations and no folders, show them directly (no Section)
-                            if sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                                ForEach(sidebarUngrouped, id: \ .id) { convo in
-                                    let isSelected = selectedConversationId == convo.id
-                                    Text(convo.title)
-                                        .font(.body)
-                                        .foregroundColor(isSelected ? .accentColor : .primary)
-                                        .onTapGesture { onSelectConversation(convo.id) }
-                                        .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-                                        .cornerRadius(8)
-                                }
-                            }
-                            // If there are both folders and ungrouped, show ungrouped in a Section
-                            if !sidebarGrouped.isEmpty && !sidebarUngrouped.isEmpty {
-                                Section(header: Text("Ungrouped").font(.headline)) {
-                                    ForEach(sidebarUngrouped, id: \ .id) { convo in
-                                        let isSelected = selectedConversationId == convo.id
-                                        Text(convo.title)
-                                            .font(.body)
-                                            .foregroundColor(isSelected ? .accentColor : .primary)
-                                            .onTapGesture { onSelectConversation(convo.id) }
-                                            .background(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
-                                            .cornerRadius(8)
-                                    }
-                                }
-                            }
-                        }
+                    if !conversations.isEmpty {
+                        DashboardSidebar(
+                            sidebarGrouped: sidebarGrouped,
+                            sidebarUngrouped: sidebarUngrouped,
+                            expandedFolders: $expandedFolders,
+                            selectedConversationId: $selectedConversationId,
+                            onSelectConversation: onSelectConversation,
+                            onToggleFolder: onToggleFolder
+                        )
                     }
-                    .frame(width: 250)
-                    // Central pane placeholder
-                    VStack(alignment: .center) {
-                        Spacer()
-                        Text("Dashboard Main Content")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                        Spacer()
+                    DashboardMessages(
+                        conversations: conversations,
+                        selectedConversationId: selectedConversationId,
+                        searchText: searchText,
+                        isLoading: isLoading
+                    )
+                    if !conversations.isEmpty {
+                        DashboardRightPane(
+                            allTags: [], // TODO: Wire up tags
+                            selectedTag: nil, // TODO: Wire up selected tag
+                            onSelectTag: { _ in }, // TODO: Wire up tag selection
+                            onAddTag: { _ in }, // TODO: Wire up add tag
+                            newTagText: "", // TODO: Wire up new tag text
+                            tagFieldFocused: $tagFieldFocused,
+                            tagError: nil, // TODO: Wire up tag error
+                            selectedConversation: nil // TODO: Wire up selected conversation
+                        )
                     }
                 }
             }

@@ -320,10 +320,6 @@ struct ContentView: SwiftUI.View {
         // ...existing code...
     }
 
-    @ViewBuilder
-    private func TagChip(tag: String, isSelected: Bool, onSelect: @escaping () -> Void) -> some SwiftUI.View {
-        // ...existing code...
-    }
 
     // Helper view for rendering chat messages
     @ViewBuilder
